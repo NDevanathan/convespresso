@@ -1,0 +1,41 @@
+Power
+5V Converter Out+      <-> 5V Rail
+5V Converter Out-      <-> GND Rail
+RPi VSYS               <-> 5V Rail
+RPi GND                <-> GND Rail
+RPi 3V3                <-> 3V3 Rail
+Pressure Sensor Red    <-> 5V Rail
+Pressure Sensor Black  <-> GND Rail
+Button and Pots GND    <-> GND Rail
+Screen VCC             <-> 3V3 Rail
+Switch GND             <-> GND Rail
+Heater Relay GND       <-> GND Rail
+Solenoid Relay GND     <-> GND Rail
+Temperature Probe VCC  <-> 5V Rail
+Temperature Probe GND  <-> GND Rail
+Pump Dimmer VCC        <-> 5V Rail
+Pump Dimmer GND        <-> 5V Rail
+
+Front Panel
+Button 1               <-> GP 21
+Button 2               <-> GP 20
+Screen SCK             <-> GP 14 (SPI 1 SCK)
+Screen SDA (MOSI)      <-> GP 15 (SPI 1 TX)
+Screen CS              <-> GP 13 (SPI 1 CSn)
+Screen DC              <-> GP 12
+Switch 2               <-> GP 11
+Switch 3               <-> GP 10
+Potentiometer 1        <-> GP 27 (ADC 1)
+Potentiometer 2        <-> GP 26 (ADC 0)
+Potentiometer 1 Poll   <-> GP 17
+Potentiometer 2 Poll   <-> GP 18
+
+Control
+Pressure Sensor Yellow <-> GP 28 (ADC 2) #Needs voltage divider
+Heater Relay Control   <-> GP 9
+Solenoid Relay Control <-> GP 22
+Temperature Probe SCK  <-> GP 2 (SPI 0 SCK)
+Temperature Probe CS   <-> GP 1 (SPI 0 CSn)
+Temperature Probe SO   <-> GP 0 (SPI 0 RX)
+Pump Dimmer Z-C        <-> GP 8
+Pump Dimmer PSM        <-> GP 7
