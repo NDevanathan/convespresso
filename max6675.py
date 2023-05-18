@@ -1,52 +1,95 @@
-from machine import Pin
-import utime
-
-class MAX6675():
-    def __init__(self, so_pin=21, cs_pin=22, sck_pin=23):
-        self.cs = Pin(cs_pin, Pin.OUT)
-        self.so = Pin(so_pin, Pin.IN)
-        self.sck = Pin(sck_pin, Pin.OUT)
-
-        self.cs.on()
-        self.so.off()
-        self.sck.off()
-
-        self.last_read_time = utime.ticks_ms()
-
-    def readFahrenheit(self):
-        return self.readCelsius() * 9.0 / 5.0 + 32
-
-    def readCelsius(self):
-        data = self.__read_data()
-        volts = sum([b * (1 << i) for i, b in enumerate(reversed(data))])
-
-        return volts * 0.25
-
-    def __read_data(self):
-        # CS down, read bytes then cs up
-        self.cs.off()
-        utime.sleep_us(10)
-        data = self.__read_word() # (self.__read_byte() << 8) | self.__read_byte()
-        self.cs.on()
-
-        if data[-3] == 1:
-            raise NoThermocoupleAttached()
-
-        return data[1:-3]
-
-    def __read_word(self):
-        return [self.__read_bit() for _ in range(16)]
+import time
 
 
-    def __read_bit(self):
-        self.sck.off()
-        utime.sleep_us(10)
-        bit = self.so.value()
-        self.sck.on()
-        utime.sleep_us(10)
-        return bit
+class MAX6675:
+    MEASUREMENT_PERIOD_MS = 220
 
+    def __init__(self, sck, cs, so):
+        """
+        Creates new object for controlling MAX6675
+        :param sck: SCK (clock) pin, must be configured as Pin.OUT
+        :param cs: CS (select) pin, must be configured as Pin.OUT
+        :param so: SO (data) pin, must be configured as Pin.IN
+        """
+        # Thermocouple
+        self._sck = sck
+        self._sck.low()
 
-class NoThermocoupleAttached(Exception):
-    """Raised when there is no thermocouple attached to MAX6675"""
-    pass
+        self._cs = cs
+        self._cs.high()
+
+        self._so = so
+        self._so.low()
+
+        self._last_measurement_start = 0
+        self._last_read_temp = 0
+        self._error = 0
+
+    def _cycle_sck(self):
+        self._sck.high()
+        time.sleep_us(1)
+        self._sck.low()
+        time.sleep_us(1)
+
+    def refresh(self):
+        """
+        Start a new measurement.
+        """
+        self._cs.low()
+        time.sleep_us(10)
+        self._cs.high()
+        self._last_measurement_start = time.ticks_ms()
+
+    def ready(self):
+        """
+        Signals if measurement is finished.
+        :return: True if measurement is ready for reading.
+        """
+        return time.ticks_ms() - self._last_measurement_start > MAX6675.MEASUREMENT_PERIOD_MS
+
+    def error(self):
+        """
+        Returns error bit of last reading. If this bit is set (=1), there's problem with the
+        thermocouple - it can be damaged or loosely connected
+        :return: Error bit value
+        """
+        return self._error
+
+    def read(self):
+        """
+        Reads last measurement and starts a new one. If new measurement is not ready yet, returns last value.
+        Note: The last measurement can be quite old (e.g. since last call to `read`).
+        To refresh measurement, call `refresh` and wait for `ready` to become True before reading.
+        :return: Measured temperature
+        """
+        # Check if new reading is available
+        if self.ready():
+            # Bring CS pin low to start protocol for reading result of
+            # the conversion process. Forcing the pin down outputs
+            # first (dummy) sign bit 15.
+            self._cs.low()
+            time.sleep_us(10)
+
+            # Read temperature bits 14-3 from MAX6675.
+            value = 0
+            for i in range(12):
+                # SCK should resemble clock signal and new SO value
+                # is presented at falling edge
+                self._cycle_sck()
+                value += self._so.value() << (11 - i)
+
+            # Read the TC Input pin to check if the input is open
+            self._cycle_sck()
+            self._error = self._so.value()
+
+            # Read the last two bits to complete protocol
+            for i in range(2):
+                self._cycle_sck()
+
+            # Finish protocol and start new measurement
+            self._cs.high()
+            self._last_measurement_start = time.ticks_ms()
+
+            self._last_read_temp = value * 0.25
+
+        return self._last_read_temp
