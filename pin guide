@@ -32,10 +32,10 @@ Potentiometer 2 Poll   <-> GP 18
 
 Control
 Pressure Sensor Yellow <-> GP 28 (ADC 2) #Needs voltage divider
-Heater Relay Control   <-> GP 9
+Heater Relay Control   <-> GP 9 (PWM 4B)
 Solenoid Relay Control <-> GP 22
 Temperature Probe SCK  <-> GP 2 (SPI 0 SCK)
 Temperature Probe CS   <-> GP 1 (SPI 0 CSn)
 Temperature Probe SO   <-> GP 0 (SPI 0 RX)
 Pump Dimmer Z-C        <-> GP 8
-Pump Dimmer PSM        <-> GP 7
+Pump Dimmer PSM        <-> GP 7 (PWM 3B)

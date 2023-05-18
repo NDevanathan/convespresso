@@ -1,4 +1,4 @@
-from machine import Pin, SPI, ADC
+from machine import Pin, SPI, ADC, PWM
 from ssd1309 import Display
 from max6675 import MAX6675
 from xglcd_font import XglcdFont
@@ -21,12 +21,14 @@ SCR_RST   = Pin(6) #Not connected (placeholder)
 
 PRS_SENS  = ADC(28)
 HEAT_CTRL = Pin(9, Pin.OUT)
+HEAT_PWM  = PWM(HEAT_CTRL, freq=10)
 SOL_CTRL  = Pin(22, Pin.OUT)
 TEMP_SCK  = Pin(2, Pin.OUT)
 TEMP_CS   = Pin(1, Pin.OUT)
 TEMP_SO   = Pin(0, Pin.OUT)
 PUMP_ZC   = Pin(8, Pin.IN)
 PUMP_PSM  = Pin(7, Pin.OUT)
+PUMP_PWM  = PWM(PUMP_PSM, freq=10)
 
 FONT   = XglcdFont('res/FixedFont5x8.c', 5, 8)
 WIDTH  = 128
@@ -40,32 +42,51 @@ temp_probe = MAX6675(sck=TEMP_SCK, cs=TEMP_CS, so=TEMP_SO)
 def poll_temp():
     return temp_probe.read()
 
+
 def heat_on():
     HEAT_CTRL.on()
 
+
 def heat_off():
     HEAT_CTRL.off()
-    
-def set_heat_level():
-    return
-    
+
+
+def set_heat_level(level: float):
+    if level < 0:
+        level = 0
+    else if level > 1:
+        level = 1
+        
+    HEAT_PWM.duty_u16(int(level*65_535))
+
+
 def poll_pressure():
     reading = PRS_SENS.read_u16()
     volts = (reading * 5) / 65536
     bars = (volts - 0.5) * 3
     return bars
 
+
 def pump_on():
     PUMP_PSM.on()
-    
+
+
 def pump_off():
     PUMP_PSM.off()
 
-def set_pump_level():
-    return
+
+def set_pump_level(level: float):
+    if level < 0:
+        level = 0
+    else if level > 1:
+        level = 1
+        
+    PUMP_PWM.duty_u16(int(level*65_535))
+
 
 def open_valve():
     SOL_CTRL.on()
-    
+
+
 def close_valve():
     SOL_CTRL.off()
