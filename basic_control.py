@@ -1,7 +1,6 @@
 from time import sleep
 from machine import Pin, SPI, ADC
 from ssd1309 import Display
-from max6675 import MAX6675
 from xglcd_font import XglcdFont
 
 
@@ -23,54 +22,39 @@ SCR_RST   = Pin(6) #Not connected (placeholder)
 PRS_SENS  = ADC(28)
 HEAT_CTRL = Pin(9, Pin.OUT)
 SOL_CTRL  = Pin(22, Pin.OUT)
-TEMP_SCK  = 2
-TEMP_CS   = 1
-TEMP_SO   = 0
+TEMP_SCK  = Pin(2)
+TEMP_CS   = Pin(1)
+TEMP_MISO = Pin(0)
 PUMP_ZC   = Pin(8, Pin.IN)
 PUMP_PSM  = Pin(7, Pin.OUT)
 
-FONT   = XglcdFont('res/FixedFont5x8.c', 5, 8)
-WIDTH  = 128
+FONT = XglcdFont('res/FixedFont5x8.c', 5, 8)
+WIDTH = 128
 HEIGHT = 64
 
-spi1 = SPI(1, baudrate=10000000, sck=SCR_SCK, mosi=SCR_MOSI)
-display = Display(spi, dc=SCR_DC, cs=SCR_CS, rst=SCR_RST)
-temp_probe = MAX6675(so_pin=TEMP_SO, cs_pin=TEMP_CS, sck_pin=TEMP_SCK) 
 
-
-def pol_heat():
-    return temp_probe.readCelsius()
-
-def heat_on():
-    HEAT_CTRL.on()
-
-def heat_off():
-    HEAT_CTRL.off()
+def test():
+    spi = SPI(1, baudrate=10000000, sck=SCR_SCK, mosi=SCR_MOSI)
+    display = Display(spi, dc=SCR_DC, cs=SCR_CS, rst=SCR_RST)
     
-def poll_press():
-    reading = PRS_SENS.read_u16()
-    volts = (reading * 5) / 65536
-    bars = (volts - 0.5) * 3
-    return bars
-
-def pump_on():
-    PUMP_PSM.on()
-    
-def pump_off():
-    PUMP_PSM.off()
-
-def open_valve():
-    SOL_CTRL.on()
-    
-def close_valve():
-    SOL_CTRL.off()
-
-def test():    
     display.draw_bitmap("res/cvx.mono", WIDTH // 2 - 50, HEIGHT // 2 - 25, 100, 50, rotate=180)
     display.present()
     sleep(3)
     
     display.clear()
+    
+    while True:
+        if not SWT_BREW.value():
+            display.draw_text(WIDTH - 5,30,"VENT",FONT,rotate=180)
+            SOL_CTRL.on()
+            PUMP_PSM.on()
+        else:
+            display.draw_text(WIDTH - 5,30,"VENT",FONT,invert=True,rotate=180)
+            SOL_CTRL.off()
+            PUMP_PSM.off()
+    
+        display.present()
+        sleep(0.1)
 
 
 test()
