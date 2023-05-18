@@ -47,6 +47,9 @@ def heat_on():
 def heat_off():
     HEAT_CTRL.off()
     
+def set_heat_levl()
+    pass
+    
 def poll_press():
     reading = PRS_SENS.read_u16()
     volts = (reading * 5) / 65536
@@ -58,6 +61,9 @@ def pump_on():
     
 def pump_off():
     PUMP_PSM.off()
+
+def set_pump_levl()
+    pass
 
 def open_valve():
     SOL_CTRL.on()
