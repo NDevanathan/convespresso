@@ -20,19 +20,21 @@ SCR_DC    = Pin(12)
 SCR_RST   = Pin(6) #Not connected (placeholder)
 
 PRS_SENS  = ADC(28)
-HEAT_CTRL = Pin(9, Pin.OUT)
-HEAT_PWM  = PWM(HEAT_CTRL, freq=10)
+#HEAT_CTRL = Pin(9, Pin.OUT)
+HEAT_PWM  = PWM(Pin(9, Pin.OUT), freq=10)
 SOL_CTRL  = Pin(22, Pin.OUT)
 TEMP_SCK  = Pin(2, Pin.OUT)
 TEMP_CS   = Pin(1, Pin.OUT)
 TEMP_SO   = Pin(0, Pin.OUT)
 PUMP_ZC   = Pin(8, Pin.IN)
-PUMP_PSM  = Pin(7, Pin.OUT)
-PUMP_PWM  = PWM(PUMP_PSM, freq=10)
+#PUMP_PSM  = Pin(7, Pin.OUT)
+PUMP_PWM  = PWM(Pin(7, Pin.OUT), freq=10)
 
-FONT   = XglcdFont('res/FixedFont5x8.c', 5, 8)
-WIDTH  = 128
-HEIGHT = 64
+FONT    = XglcdFont('res/FixedFont5x8.c', 5, 8)
+WIDTH   = 128
+HEIGHT  = 64
+START_X = WIDTH - 11
+START_Y = 35
 
 spi1 = SPI(1, baudrate=10000000, sck=SCR_SCK, mosi=SCR_MOSI)
 display = Display(spi1, dc=SCR_DC, cs=SCR_CS, rst=SCR_RST)
@@ -44,20 +46,20 @@ def poll_temp():
 
 
 def heat_on():
-    HEAT_CTRL.on()
+    HEAT_PWM.duty_u16(65535)
 
 
 def heat_off():
-    HEAT_CTRL.off()
+    HEAT_PWM.duty_u16(0)
 
 
 def set_heat_level(level: float):
     if level < 0:
         level = 0
-    else if level > 1:
+    elif level > 1:
         level = 1
         
-    HEAT_PWM.duty_u16(int(level*65_535))
+    HEAT_PWM.duty_u16(int(level*65535))
 
 
 def poll_pressure():
@@ -68,20 +70,20 @@ def poll_pressure():
 
 
 def pump_on():
-    PUMP_PSM.on()
+    PUMP_PWM.duty_u16(65535)
 
 
 def pump_off():
-    PUMP_PSM.off()
+    PUMP_PWM.duty_u16(0)
 
 
 def set_pump_level(level: float):
     if level < 0:
         level = 0
-    else if level > 1:
+    elif level > 1:
         level = 1
         
-    PUMP_PWM.duty_u16(int(level*65_535))
+    PUMP_PWM.duty_u16(int(level*65535))
 
 
 def open_valve():
