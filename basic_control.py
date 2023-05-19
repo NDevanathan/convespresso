@@ -2,16 +2,18 @@ import time
 from espresso import *
 
 def temp_control(target):
+    alpha = 1/20
     if poll_temp() >= target:
         heat_off()
     elif poll_temp() <= target:
-        heat_on()
+        control = alpha * (target - poll_temp())
+        if control <= 2/6:
+            control = 2/6
+            
+        set_heat_level(control)
         
 def pressure_control(target):
-    if poll_pressure() >= target:
-        pump_off()
-    elif poll_pressure() <= target:
-        pump_on()
+    set_pump_level(4/6)
 
 def test():
     display.draw_bitmap("res/cvx.mono", WIDTH // 2 - 50, HEIGHT // 2 - 25, 100, 50, rotate=180)
@@ -19,7 +21,7 @@ def test():
     time.sleep(3)
     display.clear()
 
-    temp_targ = 93.0
+    temp_targ = 92.0
     pres_targ = 9.0
     time_targ = 30.0
     start = time.time_ns()

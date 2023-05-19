@@ -33,7 +33,7 @@ PUMP_PWM  = PWM(Pin(7, Pin.OUT), freq=10)
 FONT    = XglcdFont('res/FixedFont5x8.c', 5, 8)
 WIDTH   = 128
 HEIGHT  = 64
-START_X = WIDTH - 11
+START_X = WIDTH - 10
 START_Y = 35
 
 spi1 = SPI(1, baudrate=10000000, sck=SCR_SCK, mosi=SCR_MOSI)
