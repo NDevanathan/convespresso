@@ -1,25 +1,40 @@
 import time
 from espresso import *
 
-def temp_control(target, elapsed):
-    if elapsed >= 6:
-        target += 2
 
+def temp_control(
+    target,
+    last_time=None,
+    last_error=None,
+    last_integral=0.
+):
     alpha = 1/20
-    if poll_temp() >= target:
-        heat_off()
-    elif poll_temp() <= target:
-        control = alpha * (target - poll_temp())
-        if control <= 2/6:
-            control = 2/6
+    beta = 1/20
+    gamma = 1/20
 
-        set_heat_level(control)
-        
-def pressure_control(target, elapsed):
-    if elapsed < 6:
-        set_pump_level(1/6)
-    else:
-        set_pump_level(4/6)
+    curr_time, curr_temp = time.time_ns(), poll_temp()
+    error = target - curr_temp
+
+    proportional = error
+    derivative = 0.
+    integral = last_integral
+    if not (last_time is None):
+        derivative = (error - last_error) / ((curr_time - last_time) / 1e+9)
+        integral += last_error * (curr_time - last_time) / 1e+9
+
+    control = alpha*proportional + beta*derivative + gamma*integral
+    if control <= 0:
+        heat_off()
+    elif control <= 2/6:
+        control = 2/6
+
+    set_heat_level(control)
+
+    return curr_time, error, integral
+
+
+def pressure_control(target):
+    set_pump_level(4/6)
 
 def test():
     display.draw_bitmap("res/cvx.mono", WIDTH // 2 - 50, HEIGHT // 2 - 25, 100, 50, rotate=180)
@@ -30,9 +45,10 @@ def test():
     temp_targ = 92.0
     pres_targ = 9.0
     time_targ = 30.0
-    start = time.time()
+    start = time.time_ns()
     seconds = 0.0
     timing = False
+    temping = False
 
     while True:
         display.clear_buffers()
@@ -41,31 +57,33 @@ def test():
         display.draw_text(START_X-78,START_Y,"TIMER",FONT,rotate=180)
 
         if not SWT_BREW.value():
+            open_valve()
+            pressure_control(pres_targ)
+
             if not timing:
                 timing = True
-                start = time.time()
-        else:
-            timing = False
-            
-        if timing:
-            seconds = time.time() - start
-            
-        
-        if not SWT_BREW.value():
-            open_valve()
-            pressure_control(pres_targ, seconds)
+                start = time.time_ns()
         else:
             pump_off()
             close_valve()
-            
+            timing = False
+
         if not SWT_MODE.value():
-            if timing:
-                temp_control(temp_targ, seconds)
+            if not temping:
+                temping = True
+                last_time, last_error, last_integral = temp_control(
+                    temp_targ
+                )
             else:
-                temp_control(temp_targ, 0)
+                last_time, last_error, last_integral = temp_control(
+                    temp_targ, last_time, last_error, last_integral
+                )
         else:
+            temping = False
             heat_off()
 
+        if timing:
+            seconds = (time.time_ns() - start) / 1.0e+9
 
         temp_str = "{0:.1f}".format(poll_temp())
         pres_str = "{0:.1f}".format(poll_pressure())
