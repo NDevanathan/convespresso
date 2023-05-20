@@ -1,3 +1,4 @@
+import time
 from machine import Pin, SPI, ADC, PWM
 from ssd1309 import Display
 from max6675 import MAX6675
@@ -92,3 +93,27 @@ def open_valve():
 
 def close_valve():
     SOL_CTRL.off()
+
+
+def boot_screen():
+    display.draw_bitmap("res/cvx.mono", WIDTH // 2 - 50, HEIGHT // 2 - 25, 100, 50, rotate=180)
+    display.present()
+    time.sleep(3)
+    display.clear()
+
+def update_display(temp, pres, sec, temp_targ, pres_targ, sec_targ):
+    display.clear_buffers()
+    
+    headers = ["TEMP.","PRES.","TIMER"]
+    values = ["{0:.1f}".format(val) for val in [temp, pres, sec]]
+    targets = ["{0:.1f}".format(val) for val in [temp_targ, pres_targ, sec_targ]]
+    offset = 0
+    
+    for i in range(3):
+        display.draw_text(START_X-offset,START_Y,headers[i],FONT,rotate=180)
+        display.draw_text(START_X-offset-6*(5-len(values[i])),START_Y-10,values[i],FONT,rotate=180)
+        display.draw_text(START_X-offset-6*(5-len(targets[i])),START_Y-20,targets[i],FONT,rotate=180)
+        offset += 39
+
+    display.present()
+    
