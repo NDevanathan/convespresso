@@ -1,7 +1,10 @@
 import time
 from espresso import *
 
-def temp_control(target):
+def temp_control(target, elapsed):
+    if elapsed >= 6:
+        target += 2
+
     alpha = 1/20
     if poll_temp() >= target:
         heat_off()
@@ -12,8 +15,11 @@ def temp_control(target):
             
         set_heat_level(control)
         
-def pressure_control(target):
-    set_pump_level(4/6)
+def pressure_control(target, elapsed):
+    if elapsed < 6:
+        set_pump_level(1/6)
+    else:
+        set_pump_level(4/6)
 
 def test():
     display.draw_bitmap("res/cvx.mono", WIDTH // 2 - 50, HEIGHT // 2 - 25, 100, 50, rotate=180)
@@ -24,7 +30,7 @@ def test():
     temp_targ = 92.0
     pres_targ = 9.0
     time_targ = 30.0
-    start = time.time_ns()
+    start = time.time()
     seconds = 0.0
     timing = False
     
@@ -35,24 +41,31 @@ def test():
         display.draw_text(START_X-78,START_Y,"TIMER",FONT,rotate=180)
         
         if not SWT_BREW.value():
-            open_valve()
-            pressure_control(pres_targ)
-            
             if not timing:
                 timing = True
-                start = time.time_ns()
+                start = time.time()
+        else:
+            timing = False
+            
+        if timing:
+            seconds = time.time() - start
+            
+        
+        if not SWT_BREW.value():
+            open_valve()
+            pressure_control(pres_targ, seconds)
         else:
             pump_off()
             close_valve()
-            timing = False
     
         if not SWT_MODE.value():
-            temp_control(temp_targ)
+            if timing:
+                temp_control(temp_targ, seconds)
+            else:
+                temp_control(temp_targ, 0)
         else:
             heat_off()
         
-        if timing:
-            seconds = (time.time_ns() - start) / 1e+9
             
         temp_str = "{0:.1f}".format(poll_temp())
         pres_str = "{0:.1f}".format(poll_pressure())
