@@ -21,7 +21,7 @@ def pressure_control(target, current, elapsed):
     if elapsed < PRE_INF_DUR:
         set_pump_level(1/6)
     else:
-        set_pump_level(4/6)
+        set_pump_level(3/6)
 
 def test():
     boot_screen()
