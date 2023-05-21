@@ -1,52 +1,47 @@
 import time
 from espresso import *
 
+PRE_INF_DUR = 8
+
+import time
+from espresso import *
 
 PRE_INF_DUR = 8
 
+def pre_infuse():
+    set_pump_level(1/6)
+
+def brew():
+    set_pump_level(4/6)
+
 def temp_control(
     target,
+    curr_temp,
     last_time=None,
     last_error=None,
     last_integral=0.,
-    elapsed=0.
 ):
-    alpha = 1/20
-    beta = 1/20
-    gamma = 1/20
+    alpha = 1/25
+    beta = 1/800
+    gamma = 1/50
 
-    if elapsed >= PRE_INF_DUR:
-        target += 2
-
-    curr_time, curr_temp = time.ticks_ms(), poll_temp()
+    curr_time = time.ticks_ms()
     error = target - curr_temp
 
     proportional = error
     derivative = 0.
     integral = last_integral
+    
     if not (last_time is None):
         sec_diff = time.ticks_diff(curr_time, last_time) / 1000.
         if sec_diff > 0:
             derivative = (error - last_error) / sec_diff
         integral += last_error * sec_diff
 
-    control = alpha*proportional + beta*derivative + gamma*integral
-    if control <= 0:
-        heat_off()
-    elif control <= 2/6:
-        control = 2/6
-
+    control = alpha*proportional + beta*integral + gamma*derivative
+    
     set_heat_level(control)
-
     return curr_time, error, integral
-
-
-def pressure_control(target, current, elapsed):
-    if elapsed < PRE_INF_DUR:
-        set_pump_level(1/6)
-    else:
-        set_pump_level(4/6)
-
 
 def test():
     boot_screen()
@@ -57,6 +52,7 @@ def test():
     start = time.ticks_ms()
     seconds = 0.0
     timing = False
+    
     last_time = None
     last_error = None
     last_integral = 0.0
@@ -65,33 +61,32 @@ def test():
         cur_temp = poll_temp()
         cur_pres = poll_pressure()
 
-        if not SWT_MODE.value():
-            temp_targ = 125
-        else:
-            temp_targ = 92
+        temp_targ = 125 if not SWT_MODE.value() else 92
 
-        if not SWT_BREW.value():
+        if (not SWT_BREW.value()) and SWT_MODE.value():
             if not timing:
                 timing = True
                 start = time.ticks_ms()
+                
+            if timing:
+                seconds = time.ticks_diff(time.ticks_ms(), start) / 1000
+                open_valve()
+                
+                if seconds <= PRE_INF_DUR:
+                    pre_infuse()
+                else:
+                    brew()
+
         else:
             timing = False
-
-        if timing:
-            seconds = time.ticks_diff(time.ticks_ms(), start) / 1000
-        else:
-            seconds = 0.
-
-        last_time, last_error, last_integral = temp_control(
-            temp_targ, last_time, last_error, last_integral, seconds
-        )
-
-        if not SWT_BREW.value():
-            open_valve()
-            pressure_control(pres_targ, cur_pres, seconds)
-        else:
             pump_off()
             close_valve()
+
+        set_temp = temp_targ
+        if timing and seconds <= PRE_INF_DUR: set_temp += 2
+        last_time, last_error, last_integral = temp_control(
+            set_temp, cur_temp, last_time, last_error, last_integral
+        )
 
         update_display(cur_temp, cur_pres, seconds, temp_targ, pres_targ, sec_targ)
         time.sleep(0.1)
