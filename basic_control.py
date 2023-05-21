@@ -29,7 +29,7 @@ def test():
     while True:
         cur_temp = poll_temp()
         cur_pres = poll_pressure()
-        
+
         temp_targ = 125 if not SWT_MODE.value() else 92
 
         if (not SWT_BREW.value()) and SWT_MODE.value():
