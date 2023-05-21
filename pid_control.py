@@ -2,25 +2,33 @@ import time
 from espresso import *
 
 
+PRE_INF_DUR = 8
+
 def temp_control(
     target,
     last_time=None,
     last_error=None,
-    last_integral=0.
+    last_integral=0.,
+    elapsed=0.
 ):
     alpha = 1/20
     beta = 1/20
     gamma = 1/20
 
-    curr_time, curr_temp = time.time_ns(), poll_temp()
+    if elapsed >= PRE_INF_DUR:
+        target += 2
+
+    curr_time, curr_temp = time.ticks_ms(), poll_temp()
     error = target - curr_temp
 
     proportional = error
     derivative = 0.
     integral = last_integral
     if not (last_time is None):
-        derivative = (error - last_error) / ((curr_time - last_time) / 1e+9)
-        integral += last_error * (curr_time - last_time) / 1e+9
+        sec_diff = time.ticks_diff(curr_time, last_time) / 1000.
+        if sec_diff > 0:
+            derivative = (error - last_error) / sec_diff
+        integral += last_error * sec_diff
 
     control = alpha*proportional + beta*derivative + gamma*integral
     if control <= 0:
@@ -33,40 +41,50 @@ def temp_control(
     return curr_time, error, integral
 
 
-def pressure_control(target):
-    set_pump_level(4/6)
+def pressure_control(target, current, elapsed):
+    if elapsed < PRE_INF_DUR:
+        set_pump_level(1/6)
+    else:
+        set_pump_level(4/6)
+
 
 def test():
-    display.draw_bitmap("res/cvx.mono", WIDTH // 2 - 50, HEIGHT // 2 - 25, 100, 50, rotate=180)
-    display.present()
-    time.sleep(3)
-    display.clear()
+    boot_screen()
 
     temp_targ = 92.0
     pres_targ = 9.0
-    time_targ = 30.0
-    start = time.time_ns()
+    sec_targ = 25.0
+    start = time.ticks_ms()
     seconds = 0.0
     timing = False
-    temping = False
+    last_time = None
+    last_error = None
+    last_integral = 0.0
 
     while True:
-        display.clear_buffers()
-        display.draw_text(START_X,START_Y,"TEMP.",FONT,rotate=180)
-        display.draw_text(START_X-39,START_Y,"PRES.",FONT,rotate=180)
-        display.draw_text(START_X-78,START_Y,"TIMER",FONT,rotate=180)
+        cur_temp = poll_temp()
+        cur_pres = poll_pressure()
+
+        if not SWT_MODE.value():
+            temp_targ = 125
+        else:
+            temp_targ = 92
 
         if not SWT_BREW.value():
-            open_valve()
-            pressure_control(pres_targ)
-
             if not timing:
                 timing = True
-                start = time.time_ns()
+                start = time.ticks_ms()
         else:
-            pump_off()
-            close_valve()
             timing = False
+
+        if timing:
+            seconds = time.ticks_diff(time.ticks_ms(), start) / 1000
+        else:
+            seconds = 0.
+
+        last_time, last_error, last_integral = temp_control(
+            temp_targ, last_time, last_error, last_integral, seconds
+        )
 
         if not SWT_MODE.value():
             if not temping:
@@ -82,22 +100,14 @@ def test():
             temping = False
             heat_off()
 
-        if timing:
-            seconds = (time.time_ns() - start) / 1.0e+9
+        if not SWT_BREW.value():
+            open_valve()
+            pressure_control(pres_targ, cur_pres, seconds)
+        else:
+            pump_off()
+            close_valve()
 
-        temp_str = "{0:.1f}".format(poll_temp())
-        pres_str = "{0:.1f}".format(poll_pressure())
-        sec_str = "{0:.1f}".format(seconds)
-
-        display.draw_text(START_X-6*(5-len(temp_str)),START_Y-10,temp_str,FONT,rotate=180)
-        display.draw_text(START_X-39-6*(5-len(pres_str)),START_Y-10,pres_str,FONT,rotate=180)
-        display.draw_text(START_X-78-6*(5-len(sec_str)),START_Y-10,sec_str,FONT,rotate=180)
-
-        display.draw_text(START_X-6,START_Y-20,"{0:.1f}".format(temp_targ),FONT,rotate=180)
-        display.draw_text(START_X-39-12,START_Y-20,"{0:.1f}".format(pres_targ),FONT,rotate=180)
-        display.draw_text(START_X-78-6,START_Y-20,"{0:.1f}".format(time_targ),FONT,rotate=180)
-
-        display.present()
+        update_display(cur_temp, cur_pres, seconds, temp_targ, pres_targ, sec_targ)
         time.sleep(0.1)
 
 
