@@ -86,20 +86,6 @@ def test():
             temp_targ, last_time, last_error, last_integral, seconds
         )
 
-        if not SWT_MODE.value():
-            if not temping:
-                temping = True
-                last_time, last_error, last_integral = temp_control(
-                    temp_targ
-                )
-            else:
-                last_time, last_error, last_integral = temp_control(
-                    temp_targ, last_time, last_error, last_integral
-                )
-        else:
-            temping = False
-            heat_off()
-
         if not SWT_BREW.value():
             open_valve()
             pressure_control(pres_targ, cur_pres, seconds)

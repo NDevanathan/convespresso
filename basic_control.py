@@ -16,7 +16,7 @@ def temp_control(target, current, elapsed):
             control = 2/6
 
         set_heat_level(control)
-        
+
 def pressure_control(target, current, elapsed):
     if elapsed < PRE_INF_DUR:
         set_pump_level(1/6)
@@ -36,7 +36,7 @@ def test():
     while True:
         cur_temp = poll_temp()
         cur_pres = poll_pressure()
-        
+
         if not SWT_MODE.value():
             temp_targ = 125
         else:
