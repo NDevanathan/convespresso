@@ -12,7 +12,7 @@ def pre_infuse():
     set_pump_level(1/6)
 
 def brew():
-    set_pump_level(4/6)
+    set_pump_level(3/6)
 
 def temp_control(
     target,
@@ -21,9 +21,9 @@ def temp_control(
     last_error=None,
     last_integral=0.,
 ):
-    alpha = 1/25
-    beta = 1/800
-    gamma = 1/50
+    alpha = 1/10
+    beta = 1/2000
+    gamma = 1/20
 
     curr_time = time.ticks_ms()
     error = target - curr_temp
@@ -83,7 +83,7 @@ def test():
             close_valve()
 
         set_temp = temp_targ
-        if timing and seconds <= PRE_INF_DUR: set_temp += 2
+        if timing and seconds <= PRE_INF_DUR: set_temp += 1
         last_time, last_error, last_integral = temp_control(
             set_temp, cur_temp, last_time, last_error, last_integral
         )

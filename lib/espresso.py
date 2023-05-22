@@ -46,6 +46,9 @@ display = Display(spi1, dc=SCR_DC, cs=SCR_CS, rst=SCR_RST)
 # Initialize the temperature sensor (MAX6675)
 temp_probe = MAX6675(sck=TEMP_SCK, cs=TEMP_CS, so=TEMP_SO)
 
+# Coefficients for polynomial model of flow w.r.t. pressure
+flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
+
 
 def poll_temp():
     """
@@ -88,6 +91,15 @@ def poll_pressure():
     volts = (reading * 5) / 65536
     bars = (volts - 0.5) * 3
     return bars
+
+
+def calc_flow(pressure, power_level):
+    """
+    Calculates the flow (ml/s) based on the measured pressue and pump power level.
+    """
+    flow = sum([flow_coefs[i] * pressure**i for i in range(len(flow_coefs))])
+    flow *= power_level
+    return flow
 
 
 def pump_on():
