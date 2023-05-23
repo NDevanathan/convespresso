@@ -5,8 +5,10 @@ PRE_INF_DUR = 8
 RAMP_DUR = 5
 PRE_INF_LEVEL = 1/4
 RAMP_LEVEL = 1/2
-TARGET_FLOW_RATE = 2.0
-TARGET_WEIGHT = 40
+ESPRESSO_MASS = 36
+RISTRETTO_MASS = 22
+ESPRESSO_RATE = 1.5
+RISTRETTO_RATE = 0.75
 BREW_TEMP = 90
 STEAM_TEMP = 125
 
@@ -58,6 +60,8 @@ def test():
     temp_targ = BREW_TEMP
     flow = 0.
     total_flow = 0.
+    flow_targ = ESPRESSO_RATE
+    mass_targ = ESPRESSO_MASS
     
     start = time.ticks_ms()
     seconds = 0.
@@ -76,16 +80,22 @@ def test():
         temperature = gamma * poll_temp() + (1 - gamma) * temperature
         pressure = gamma * poll_pressure() + (1 - gamma) * pressure
 
-        temp_targ = STEAM_TEMP if not SWT_MODE.value() else BREW_TEMP
-        
-        if (not SWT_BREW.value()) and SWT_MODE.value():
+        #temp_targ = STEAM_TEMP if not SWT_MODE.value() else BREW_TEMP
+        if not SWT_MODE.value():
+            flow_targ = ESPRESSO_RATE
+            mass_targ = ESPRESSO_MASS
+        else:
+            flow_targ = RISTRETTO_RATE
+            mass_targ = RISTRETTO_MASS
+            
+        if not SWT_BREW.value():
             if not timing:
                 timing = True
                 start = time.ticks_ms()
                 seconds = 0.0
                 total_flow = 0.0
 
-            if timing and total_flow < TARGET_WEIGHT:
+            if timing and total_flow < mass_targ:
                 delta = (time.ticks_diff(time.ticks_ms(), start) / 1000) - seconds
                 seconds += delta 
                 open_valve()
@@ -100,16 +110,16 @@ def test():
                     total_flow += delta * flow
                     ramp()
                 else:
-                    flow = calc_flow(cur_pres, pump_level)
+                    flow = calc_flow(pressure, pump_level)
                     # pump_level = brew(flow, TARGET_FLOW_RATE)
-                    pump_level = brew(flow, TARGET_FLOW_RATE, pump_level)
+                    pump_level = brew(flow, flow_targ, pump_level)
                     total_flow += delta * flow
 
             else:
                 pump_off()
                 close_valve()
                 flow = 0.0
-
+            
         else:
             timing = False
             pump_off()
