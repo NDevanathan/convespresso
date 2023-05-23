@@ -16,8 +16,9 @@ def pre_infuse():
 def ramp():
     set_pump_level(RAMP_LEVEL)
 
-def brew(flow, target):
-    level = target / flow
+def brew(flow, target, curr_level=1.):
+    # level = target / flow
+    level = (target * curr_level / flow) ** (0.5)
     set_pump_level(level)
     return level
 
@@ -38,7 +39,7 @@ def temp_control(
     proportional = error
     derivative = 0.
     integral = last_integral
-    
+
     if not (last_time is None):
         sec_diff = time.ticks_diff(curr_time, last_time) / 1000.
         if sec_diff > 0:
@@ -46,7 +47,7 @@ def temp_control(
         integral += last_error * sec_diff
 
     control = alpha*proportional + beta*integral + gamma*derivative
-    
+
     set_heat_level(control)
     return curr_time, error, integral
 
@@ -60,7 +61,7 @@ def test():
     seconds = 0.0
     pump_level = 0
     pres_targ = 9.0
-    
+
     last_time = None
     last_error = None
     last_integral = 0.0
@@ -76,11 +77,11 @@ def test():
                 start = time.ticks_ms()
                 seconds = 0.0
                 total_flow = 0.0
-                
+
             if timing and total_flow <= TARGET_WEIGHT:
                 seconds = time.ticks_diff(time.ticks_ms(), start) / 1000
                 open_valve()
-                
+
                 if seconds <= PRE_INF_DUR:
                     pump_level = PRE_INF_LEVEL
                     flow = calc_flow(cur_pres, pump_level)
@@ -92,14 +93,15 @@ def test():
                     ramp()
                 else:
                     flow = calc_flow(cur_pres, pump_level)
-                    pump_level = brew(flow, TARGET_FLOW_RATE)
+                    # pump_level = brew(flow, TARGET_FLOW_RATE)
+                    pump_level = brew(flow, TARGET_FLOW_RATE, pump_level)
                     total_flow += 0.1 * flow
-                    
+
             else:
                 pump_off()
                 close_valve()
                 flow = 0.0
-                    
+
         else:
             timing = False
             pump_off()
