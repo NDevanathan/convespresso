@@ -37,7 +37,7 @@ FONT    = XglcdFont('res/FixedFont5x8.c', 5, 8)
 WIDTH   = 128
 HEIGHT  = 64
 START_X = WIDTH - 10
-START_Y = 35
+START_Y = 45
 
 # Initialize the display
 spi1 = SPI(1, baudrate=10000000, sck=SCR_SCK, mosi=SCR_MOSI)
@@ -152,15 +152,15 @@ def boot_screen():
     display.clear()
 
 
-def update_display(temp, pres, sec, temp_targ, pres_targ, sec_targ):
+def update_display(temp, pres, flow, temp_targ, pres_targ, flow_targ, sec):
     """
-    Update the display with the current temperature, pressure, and timer values, as well as their respective target values.
+    Update the display with the current temperature, pressure, flow, and timer values, as well as their respective target values.
     """
     display.clear_buffers()
 
-    headers = ["TEMP.", "PRES.", "TIMER"]
-    values = ["{0:.1f}".format(val) for val in [temp, pres, sec]]
-    targets = ["{0:.1f}".format(val) for val in [temp_targ, pres_targ, sec_targ]]
+    headers = ["TEMP.", "PRES.", "FLOW."]
+    values = ["{0:.1f}".format(val) for val in [temp, pres, flow]]
+    targets = ["{0:.1f}".format(val) for val in [temp_targ, pres_targ, flow_targ]]
     offset = 0
 
     for i in range(3):
@@ -169,4 +169,7 @@ def update_display(temp, pres, sec, temp_targ, pres_targ, sec_targ):
         display.draw_text(START_X - offset - 6 * (5 - len(targets[i])), START_Y - 20, targets[i], FONT, rotate=180)
         offset += 39
 
+    sec_str = "{0:.1f}".format(sec)
+    display.draw_text(START_X - 20, START_Y - 32, "TIME:", FONT, rotate=180)
+    display.draw_text(START_X - 60 - 6 * (5 - len(sec_str)), START_Y - 32, sec_str, FONT, rotate=180)
     display.present()

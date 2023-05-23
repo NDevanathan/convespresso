@@ -2,14 +2,19 @@ import time
 from espresso import *
 
 PRE_INF_DUR = 8
-SHOT_DUR = 18
+RAMP_DUR = 5
 PRE_INF_LEVEL = 1/6
+RAMP_LEVEL = 4/6
 TARGET_FLOW_RATE = 2.0
-BREW_TEMP = 92
+TARGET_WEIGHT = 40
+BREW_TEMP = 90
 STEAM_TEMP = 125
 
 def pre_infuse():
     set_pump_level(PRE_INF_LEVEL)
+
+def ramp():
+    set_pump_level(RAMP_LEVEL)
 
 def brew(flow, target):
     level = target / flow
@@ -49,10 +54,12 @@ def test():
     boot_screen()
 
     temp_targ = BREW_TEMP
+    flow = 0.0
     total_flow = 0.0
     start = time.ticks_ms()
     seconds = 0.0
-    pump_level = PRE_INF_LEVEL
+    pump_level = 0
+    pres_targ = 9.0
     
     last_time = None
     last_error = None
@@ -68,23 +75,36 @@ def test():
                 timing = True
                 start = time.ticks_ms()
                 seconds = 0.0
+                total_flow = 0.0
                 
-            if timing and seconds <= PRE_INF_DUR + SHOT_DUR:
+            if timing and total_flow <= TARGET_WEIGHT:
                 seconds = time.ticks_diff(time.ticks_ms(), start) / 1000
                 open_valve()
                 
                 if seconds <= PRE_INF_DUR:
                     pump_level = PRE_INF_LEVEL
+                    flow = calc_flow(cur_pres, pump_level)
                     pre_infuse()
+                elif seconds <= PRE_INF_DUR + RAMP_DUR:
+                    pump_level = RAMP_LEVEL
+                    flow = calc_flow(cur_pres, pump_level)
+                    total_flow += 0.1 * flow
+                    ramp()
                 else:
                     flow = calc_flow(cur_pres, pump_level)
-                    pump_level = brew(flow, flow_targ, pump_level)
+                    pump_level = brew(flow, TARGET_FLOW_RATE)
                     total_flow += 0.1 * flow
+                    
+            else:
+                pump_off()
+                close_valve()
+                flow = 0.0
                     
         else:
             timing = False
             pump_off()
             close_valve()
+            flow = 0.0
 
         set_temp = temp_targ
         if timing and seconds <= PRE_INF_DUR: set_temp += 1
@@ -92,7 +112,7 @@ def test():
             set_temp, cur_temp, last_time, last_error, last_integral
         )
 
-        update_display(cur_temp, cur_pres, seconds, temp_targ, pres_targ, sec_targ)
+        update_display(cur_temp, cur_pres, flow, temp_targ, pres_targ, total_flow, seconds)
         time.sleep(0.1)
 
 
