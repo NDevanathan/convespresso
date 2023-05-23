@@ -97,7 +97,7 @@ def calc_flow(pressure, power_level):
     """
     Calculates the flow (ml/s) based on the measured pressue and pump power level.
     """
-    flow = sum([flow_coefs[i] * pressure**i for i in range(len(flow_coefs))])
+    flow = sum([flow_coefs[i] * pressure**i for i in range(len(flow_coefs))]) / 60
     flow *= power_level
     return flow
 
