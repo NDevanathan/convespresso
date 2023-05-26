@@ -152,7 +152,7 @@ def boot_screen():
     display.clear()
 
 
-def update_display(temp, pres, flow, temp_targ, pres_targ, flow_targ, sec):
+def update_display(temp, pres, flow, temp_targ, pres_targ, flow_targ, sec, mode):
     """
     Update the display with the current temperature, pressure, flow, and timer values, as well as their respective target values.
     """
@@ -172,4 +172,5 @@ def update_display(temp, pres, flow, temp_targ, pres_targ, flow_targ, sec):
     sec_str = "{0:.1f}".format(sec)
     display.draw_text(START_X - 20, START_Y - 32, "TIME:", FONT, rotate=180)
     display.draw_text(START_X - 60 - 6 * (5 - len(sec_str)), START_Y - 32, sec_str, FONT, rotate=180)
+    display.draw_text(WIDTH/2 - 3 * (len(sec_str)), START_Y - 42, mode, FONT, rotate=180)
     display.present()
