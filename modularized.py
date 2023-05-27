@@ -1,37 +1,25 @@
 import time
 from espresso import *
 
-#PRE_INF_DUR = 8
+PRE_INF_DUR = 8
 RAMP_DUR = 5
 PRE_INF_LEVEL = 1/4
 RAMP_LEVEL = 1/2
-ESPRESSO_MASS = 30
-RISTRETTO_MASS = 18
-ESPRESSO_RATE = 1.5
-RISTRETTO_RATE = 0.75
+TOTAL_MASS = [30, 18]
+FLOW_RATE = [1.5, 0.75]
+MODES = ["ESPRESSO", "RISTRETTO"]
 BREW_TEMP = 94
-STEAM_TEMP = 125
-ABSORBTION_MASS = 14
+DELTA = 0.06
 
-def pre_infuse():
-    set_pump_level(PRE_INF_LEVEL)
-
-def ramp():
-    set_pump_level(RAMP_LEVEL)
-
-def brew(flow, target, curr_level=1.):
-    # level = target / flow
-    level = (target * curr_level / flow) ** (0.5)
-    if level > RAMP_LEVEL: level = RAMP_LEVEL
-    set_pump_level(level)
-    return level
-
+last_time = None
+last_error = None
+last_integral = 0.
 def temp_control(
     target,
-    curr_temp,
-    last_time=None,
-    last_error=None,
-    last_integral=0.,
+    curr_temp#,
+    #last_time=None,
+    #last_error=None,
+    #last_integral=0.,
 ):
     alpha = 1/10
     beta = 1/3000
@@ -53,109 +41,111 @@ def temp_control(
     control = alpha*proportional + beta*integral + gamma*derivative
 
     set_heat_level(control)
-    return curr_time, error, integral
+    #return curr_time, error, integral
 
-def test():
-    boot_screen()
+def pre_infuse(state):
+    state.pump_level = PRE_INF_LEVEL
+    state.flow = calc_flow(state.pressure, state.pump_level)
+    state.seconds = time.ticks_diff(time.ticks_ms(), state.start) / 1000
+    set_pump_level(PRE_INF_LEVEL)
+    return state
 
-    temp_targ = BREW_TEMP
-    flow = 0.
-    total_flow = 0.
-    flow_targ = ESPRESSO_RATE
-    mass_targ = ESPRESSO_MASS
-    pre_inf_dur = 0
-    
-    start = time.ticks_ms()
-    seconds = 0.
-    pump_level = 0.
-    pres_targ = 9.
+def ramp_up(state):
+    state.pump_level = RAMP_LEVEL
+    state.flow = calc_flow(state.pressure, state.pump_level)
+    delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
+    state.seconds = time.ticks_diff(time.ticks_ms(), state.start) / 1000
+    state.total_flow += delta * state.flow
+    set_pump_level(RAMP_LEVEL)
+    return state
 
-    last_time = None
-    last_error = None
-    last_integral = 0.
-    
-    temperature = poll_temp()
-    pressure = poll_pressure()
-    gamma = 0.5
-    
-    brew_stage = 0
-
-    while True:
-        temperature = gamma * poll_temp() + (1 - gamma) * temperature
-        pressure = gamma * poll_pressure() + (1 - gamma) * pressure
+def hold_flow(state):
+    if state.total_flow < state.mass_targ:
+        state.flow = calc_flow(state.pressure, state.pump_level)
+        state.pump_level = (state.flow_targ * state.pump_level / state.flow) ** (0.5)
         
-        mode = 1
-        if not SWT_MODE.value():
-            flow_targ = ESPRESSO_RATE
-            mass_targ = ESPRESSO_MASS
-        else:
-            flow_targ = RISTRETTO_RATE
-            mass_targ = RISTRETTO_MASS
-            
-        if not SWT_BREW.value():
-            if not timing:
-                timing = True
-                start = time.ticks_ms()
-                seconds = 0.0
-                total_flow = 0.0
+        if state.pump_level > RAMP_LEVEL: state.pump_level = RAMP_LEVEL
+        delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
+        state.seconds = time.ticks_diff(time.ticks_ms(), state.start) / 1000
+        state.total_flow += delta * state.flow
+        set_pump_level(state.pump_level)
+        
+    else:
+        pump_off()
+        state.flow = 0
+        
+    return state
 
-            if timing and total_flow < mass_targ + ABSORBTION_MASS:
-                delta = (time.ticks_diff(time.ticks_ms(), start) / 1000) - seconds
-                seconds += delta 
-                open_valve()
+brew_modes = [pre_infuse, ramp_up, hold_flow]
+def brew(mode, state):
+    temp_control(state.temp_targ, state.temperature)
 
-                if total_flow <= ABSORBTION_MASS: #seconds <= PRE_INF_DUR:
-                    pump_level = PRE_INF_LEVEL
-                    flow = calc_flow(pressure, pump_level)
-                    total_flow += delta * flow
-                    pre_inf_dur = seconds
-                    pre_infuse()
-                elif seconds <= pre_inf_dur + RAMP_DUR: #seconds <= PRE_INF_DUR + RAMP_DUR:
-                    pump_level = RAMP_LEVEL
-                    flow = calc_flow(pressure, pump_level)
-                    total_flow += delta * flow
-                    ramp()
-                else:
-                    flow = calc_flow(pressure, pump_level)
-                    # pump_level = brew(flow, TARGET_FLOW_RATE)
-                    pump_level = brew(flow, flow_targ, pump_level)
-                    total_flow += delta * flow
-
-            else:
-                pump_off()
-                close_valve()
-                flow = 0.0
-            
-        else:
-            timing = False
-            pump_off()
-            close_valve()
-            flow = 0.0
-
-        set_temp = temp_targ
-        if timing and seconds > pre_inf_dur: set_temp += 1
-        last_time, last_error, last_integral = temp_control(
-            set_temp, temperature, last_time, last_error, last_integral
-        )
-
-        poured = max(total_flow - ABSORBTION_MASS, 0)
-        update_display(temperature, pressure, flow, temp_targ, pres_targ, poured, seconds, mode)
-        time.sleep(0.06)
-
-
-test()
+    if mode < 0:
+        pump_off()
+        close_valve()
+        state.flow = 0
+        return state
+    else:
+        open_valve()
+        return brew_modes[mode](state)
 
 def main_loop():
-    #setup
+    boot_screen()
     
+    state = BrewState(
+        start = time.ticks_ms(),
+        seconds = 0,
+        temperature = poll_temp(),
+        temp_targ = BREW_TEMP,
+        pressure = poll_pressure(),
+        pres_targ = 9.,
+        flow = 0.,
+        flow_targ = FLOW_RATE[0],
+        total_flow = 0.,
+        mass_targ = TOTAL_MASS[0],
+        pump_level = 0.
+    )
+    gamma = 0.5
+    brew_mode = -1
+
     while True:
-        mode = 1 - SWT_MODE.value()
+        state.temperature = gamma * poll_temp() + (1 - gamma) * state.temperature
+        state.pressure = gamma * poll_pressure() + (1 - gamma) * state.pressure
+
+        mode = SWT_MODE.value()
+        state.flow_targ = FLOW_RATE[mode]
+        state.mass_targ = TOTAL_MASS[mode]
+            
         if not SWT_BREW.value():
-            brew mode
+            if brew_mode < 0:
+                brew_mode = 0
+                state.start = time.ticks_ms()
+                state.total_flow = 0.0
+                state.seconds = 0.
+
+            if brew_mode == 0 and state.seconds > PRE_INF_DUR:
+                brew_mode = 1
+                
+            elif brew_mode == 1 and state.seconds > PRE_INF_DUR + RAMP_DUR:
+                brew_mode = 2
             
         else:
             brew_mode = -1
+
+        state = brew(brew_mode, state)
+
+        update_display(
+            state.temperature, 
+            state.pressure, 
+            state.flow, 
+            state.temp_targ, 
+            state.pres_targ, 
+            state.total_flow, 
+            state.seconds,
+            MODES[mode]
+        )
         
-        update_display(temperature, pressure, flow, temp_targ, pres_targ, poured, seconds, mode)
-        time.sleep(delta)
-        
+        time.sleep(DELTA)
+
+
+main_loop()

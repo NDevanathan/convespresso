@@ -64,7 +64,7 @@ def test():
         if timing and seconds <= PRE_INF_DUR + SHOT_DUR: set_temp += 2
         temp_control(set_temp, cur_temp)
 
-        update_display(cur_temp, cur_pres, seconds, temp_targ, pres_targ, PRE_INF_DUR + SHOT_DUR)
+        #update_display(cur_temp, cur_pres, seconds, temp_targ, pres_targ, PRE_INF_DUR + SHOT_DUR)
         time.sleep(0.1)
 
 

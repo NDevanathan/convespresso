@@ -49,6 +49,31 @@ temp_probe = MAX6675(sck=TEMP_SCK, cs=TEMP_CS, so=TEMP_SO)
 # Coefficients for polynomial model of flow w.r.t. pressure
 flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
 
+class BrewState:
+    def __init__(self, 
+        start:       int,
+        seconds:     float,
+        temperature: float,
+        temp_targ:   float,
+        pressure:    float,
+        pres_targ:   float,
+        flow:        float,
+        flow_targ:   float,
+        total_flow:  float,
+        mass_targ:   float,
+        pump_level:  float):
+        
+        self.start       = start
+        self.seconds     = seconds
+        self.temperature = temperature
+        self.temp_targ   = temp_targ
+        self.pressure    = pressure
+        self.pres_targ   = pres_targ
+        self.flow        = flow
+        self.flow_targ   = flow_targ
+        self.total_flow  = total_flow
+        self.mass_targ   = mass_targ
+        self.pump_level  = pump_level
 
 def poll_temp():
     """
@@ -172,5 +197,5 @@ def update_display(temp, pres, flow, temp_targ, pres_targ, flow_targ, sec, mode)
     sec_str = "{0:.1f}".format(sec)
     display.draw_text(START_X - 20, START_Y - 32, "TIME:", FONT, rotate=180)
     display.draw_text(START_X - 60 - 6 * (5 - len(sec_str)), START_Y - 32, sec_str, FONT, rotate=180)
-    display.draw_text(WIDTH/2 - 3 * (len(sec_str)), START_Y - 42, mode, FONT, rotate=180)
+    display.draw_text(WIDTH//2 + 3 * (len(mode)), START_Y - 42, mode, FONT, rotate=180)
     display.present()
