@@ -5,10 +5,10 @@ PRE_INF_DUR = 8
 RAMP_DUR = 5
 PRE_INF_LEVEL = 1/4
 RAMP_LEVEL = 1/2
-TOTAL_MASS = [30, 18]
-FLOW_RATE = [1.5, 0.75]
-MODES = ["ESPRESSO", "RISTRETTO"]
-BREW_TEMP = 94
+TOTAL_MASS = [36, 36, 18]
+FLOW_RATE = [1.5, 1.5, 0.75]
+MODES = ["STEAM", "ESPRESSO", "RISTRETTO"]
+BREW_TEMP = [130, 90, 90]
 DELTA = 0.06
 
 last_time = None
@@ -21,8 +21,8 @@ def temp_control(
     #last_error=None,
     #last_integral=0.,
 ):
-    alpha = 1/10
-    beta = 1/3000
+    alpha = 1/5
+    beta = 1/2000
     gamma = 1/20
 
     curr_time = time.ticks_ms()
@@ -54,25 +54,25 @@ def ramp_up(state):
     state.pump_level = RAMP_LEVEL
     state.flow = calc_flow(state.pressure, state.pump_level)
     delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
-    state.seconds = time.ticks_diff(time.ticks_ms(), state.start) / 1000
+    state.seconds += delta
     state.total_flow += delta * state.flow
     set_pump_level(RAMP_LEVEL)
     return state
 
 def hold_flow(state):
-    if state.total_flow < state.mass_targ:
-        state.flow = calc_flow(state.pressure, state.pump_level)
-        state.pump_level = (state.flow_targ * state.pump_level / state.flow) ** (0.5)
-        
-        if state.pump_level > RAMP_LEVEL: state.pump_level = RAMP_LEVEL
-        delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
-        state.seconds = time.ticks_diff(time.ticks_ms(), state.start) / 1000
-        state.total_flow += delta * state.flow
-        set_pump_level(state.pump_level)
-        
-    else:
-        pump_off()
-        state.flow = 0
+    #if state.total_flow < state.mass_targ:
+    state.flow = calc_flow(state.pressure, state.pump_level)
+    state.pump_level = (state.flow_targ * state.pump_level / state.flow) ** (0.5)
+    
+    if state.pump_level > RAMP_LEVEL: state.pump_level = RAMP_LEVEL
+    delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
+    state.seconds += delta
+    state.total_flow += delta * state.flow
+    set_pump_level(state.pump_level)
+    
+    #else:
+    #    pump_off()
+    #    state.flow = 0
         
     return state
 
@@ -105,7 +105,7 @@ def main_loop():
         mass_targ = TOTAL_MASS[0],
         pump_level = 0.
     )
-    gamma = 0.5
+    gamma = 1
     brew_mode = -1
 
     while True:
@@ -115,8 +115,9 @@ def main_loop():
         mode = SWT_MODE.value()
         state.flow_targ = FLOW_RATE[mode]
         state.mass_targ = TOTAL_MASS[mode]
+        state.temp_targ = BREW_TEMP[mode]
             
-        if not SWT_BREW.value():
+        if not SWT_BREW.value() and mode > 0:
             if brew_mode < 0:
                 brew_mode = 0
                 state.start = time.ticks_ms()
