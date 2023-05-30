@@ -11,6 +11,14 @@ MODES = ["STEAM", "ESPRESSO", "RISTRETTO"]
 BREW_TEMP = [130, 90, 90]
 DELTA = 0.06
 
+TRACK_PRESSURE = True
+TRACK_TEMPERATURE = True
+TRACK_PUMP_POWER = True
+TRACK_BOILER_POWER = True
+TRACK_SECONDS = True
+MAX_STORAGE = 500
+OVERWRITE = True # If false, then data are simply stopped being collected
+
 last_time = None
 last_error = None
 last_integral = 0.
@@ -40,7 +48,7 @@ def temp_control(
 
     control = alpha*proportional + beta*integral + gamma*derivative
 
-    set_heat_level(control)
+    state.heat_level = set_heat_level(control)
     #return curr_time, error, integral
 
 def pre_infuse(state):
@@ -63,17 +71,17 @@ def hold_flow(state):
     #if state.total_flow < state.mass_targ:
     state.flow = calc_flow(state.pressure, state.pump_level)
     state.pump_level = (state.flow_targ * state.pump_level / state.flow) ** (0.5)
-    
+
     if state.pump_level > RAMP_LEVEL: state.pump_level = RAMP_LEVEL
     delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
     state.seconds += delta
     state.total_flow += delta * state.flow
     set_pump_level(state.pump_level)
-    
+
     #else:
     #    pump_off()
     #    state.flow = 0
-        
+
     return state
 
 brew_modes = [pre_infuse, ramp_up, hold_flow]
@@ -91,10 +99,10 @@ def brew(mode, state):
 
 def main_loop():
     boot_screen()
-    
+
     state = BrewState(
         start = time.ticks_ms(),
-        seconds = 0,
+        seconds = 0.,
         temperature = poll_temp(),
         temp_targ = BREW_TEMP,
         pressure = poll_pressure(),
@@ -103,10 +111,29 @@ def main_loop():
         flow_targ = FLOW_RATE[0],
         total_flow = 0.,
         mass_targ = TOTAL_MASS[0],
-        pump_level = 0.
+        pump_level = 0.,
+        heat_level = 0.
     )
     gamma = 1
     brew_mode = -1
+
+    pressure_hist = []
+    temp_hist = []
+    pump_power_hist = []
+    boiler_power_hist = []
+    seconds_hist = []
+
+    cond_pairs = zip(
+        [TRACK_PRESSURE, TRACK_TEMPERATURE,
+         TRACK_PUMP_POWER, TRACK_BOILER_POWER,
+         TRACK_SECONDS],
+        [pressure_hist, temp_hist,
+         pump_power_hist, boiler_power_hist,
+         seconds_hist],
+        ['pressure', 'temperature',
+         'pump_level', 'heat_level',
+         'seconds']
+    )
 
     while True:
         state.temperature = gamma * poll_temp() + (1 - gamma) * state.temperature
@@ -116,7 +143,7 @@ def main_loop():
         state.flow_targ = FLOW_RATE[mode]
         state.mass_targ = TOTAL_MASS[mode]
         state.temp_targ = BREW_TEMP[mode]
-            
+
         if not SWT_BREW.value() and mode > 0:
             if brew_mode < 0:
                 brew_mode = 0
@@ -126,26 +153,39 @@ def main_loop():
 
             if brew_mode == 0 and state.seconds > PRE_INF_DUR:
                 brew_mode = 1
-                
+
             elif brew_mode == 1 and state.seconds > PRE_INF_DUR + RAMP_DUR:
                 brew_mode = 2
-            
+
         else:
             brew_mode = -1
 
         state = brew(brew_mode, state)
 
         update_display(
-            state.temperature, 
-            state.pressure, 
-            state.flow, 
-            state.temp_targ, 
-            state.pres_targ, 
-            state.total_flow, 
+            state.temperature,
+            state.pressure,
+            state.flow,
+            state.temp_targ,
+            state.pres_targ,
+            state.total_flow,
             state.seconds,
             MODES[mode]
         )
-        
+
+        for cond, hist, name in cond_pairs:
+            if not SWT_BREW.value() and mode > 0:
+                if cond and len(hist) < MAX_STORAGE:
+                    hist.append(getattr(state, name))
+                elif cond and len(hist) == MAX_STORAGE and OVERWRITE:
+                    hist.pop(0)
+                    hist.append(getattr(state, name))
+            elif len(hist) > 0:
+                file = open(f'log_{name}_{time.localtime()}.txt', 'w')
+                for val in hist:
+                    file.write(f'{str(val)}\n')
+                file.close()
+
         time.sleep(DELTA)
 
 

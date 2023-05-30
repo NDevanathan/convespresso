@@ -50,7 +50,7 @@ temp_probe = MAX6675(sck=TEMP_SCK, cs=TEMP_CS, so=TEMP_SO)
 flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
 
 class BrewState:
-    def __init__(self, 
+    def __init__(self,
         start:       int,
         seconds:     float,
         temperature: float,
@@ -61,8 +61,9 @@ class BrewState:
         flow_targ:   float,
         total_flow:  float,
         mass_targ:   float,
-        pump_level:  float):
-        
+        pump_level:  float,
+        heat_level:  float):
+
         self.start       = start
         self.seconds     = seconds
         self.temperature = temperature
@@ -74,6 +75,7 @@ class BrewState:
         self.total_flow  = total_flow
         self.mass_targ   = mass_targ
         self.pump_level  = pump_level
+        self.heat_level  = heat_level
 
 def poll_temp():
     """
@@ -106,6 +108,7 @@ def set_heat_level(level: float):
         level = 1
 
     HEAT_PWM.duty_u16(int(level * 65535))
+    return level
 
 
 def poll_pressure():
@@ -176,7 +179,7 @@ def boot_screen():
     time.sleep(3)
     display.clear()
 
-    
+
 def boot_screen2():
     """
     Display special boot screen on the display.
