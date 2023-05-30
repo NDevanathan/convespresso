@@ -11,11 +11,9 @@ MODES = ["STEAM", "ESPRESSO", "RISTRETTO"]
 BREW_TEMP = [130, 90, 90]
 DELTA = 0.06
 
-TRACK_PRESSURE = True
-TRACK_TEMPERATURE = True
-TRACK_PUMP_POWER = True
-TRACK_BOILER_POWER = True
-TRACK_SECONDS = True
+VALS_TO_TRACK = [
+    'seconds', 'pressure', 'temperature', 'pump_level', 'heat_level'
+]
 MAX_STORAGE = 500
 OVERWRITE = True # If false, then data are simply stopped being collected
 
@@ -117,23 +115,9 @@ def main_loop():
     gamma = 1
     brew_mode = -1
 
-    pressure_hist = []
-    temp_hist = []
-    pump_power_hist = []
-    boiler_power_hist = []
-    seconds_hist = []
-
-    cond_pairs = zip(
-        [TRACK_PRESSURE, TRACK_TEMPERATURE,
-         TRACK_PUMP_POWER, TRACK_BOILER_POWER,
-         TRACK_SECONDS],
-        [pressure_hist, temp_hist,
-         pump_power_hist, boiler_power_hist,
-         seconds_hist],
-        ['pressure', 'temperature',
-         'pump_level', 'heat_level',
-         'seconds']
-    )
+    hists = {}
+    for val in VALS_TO_TRACK:
+        hists[val] = []
 
     while True:
         state.temperature = gamma * poll_temp() + (1 - gamma) * state.temperature
@@ -173,11 +157,11 @@ def main_loop():
             MODES[mode]
         )
 
-        for cond, hist, name in cond_pairs:
+        for name, hist in hists.items():
             if not SWT_BREW.value() and mode > 0:
-                if cond and len(hist) < MAX_STORAGE:
+                if len(hist) < MAX_STORAGE:
                     hist.append(getattr(state, name))
-                elif cond and len(hist) == MAX_STORAGE and OVERWRITE:
+                elif len(hist) == MAX_STORAGE and OVERWRITE:
                     hist.pop(0)
                     hist.append(getattr(state, name))
             elif len(hist) > 0:
