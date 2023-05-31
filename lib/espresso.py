@@ -180,16 +180,6 @@ def boot_screen():
     display.clear()
 
 
-def boot_screen2():
-    """
-    Display special boot screen on the display.
-    """
-    display.draw_bitmap("res/zach.mono", 0, 0, 128, 64, rotate=180)
-    display.present()
-    time.sleep(5)
-    display.clear()
-
-
 def update_display(temp, pres, flow, temp_targ, pres_targ, flow_targ, sec, mode):
     """
     Update the display with the current temperature, pressure, flow, and timer values, as well as their respective target values.
