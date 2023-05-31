@@ -7,8 +7,8 @@ DELTA = 0.1
 VALS_TO_TRACK = [
     'seconds', 'pressure', 'temperature', 'pump_level', 'heat_level'
 ]
-MAX_STORAGE = 10000
-OVERWRITE = True # If false, then data are simply stopped being collected
+MAX_STORAGE = 450
+OVERWRITE = False # If false, then data are simply stopped being collected
 
 
 def main_loop():
