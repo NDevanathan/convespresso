@@ -1,8 +1,8 @@
 import time
 from espresso import *
 
-HEAT_LEVEL = 1
-DELTA = 0.1
+PUMP_LEVEL = 1
+DELTA = 0.01
 
 VALS_TO_TRACK = [
     'seconds', 'pressure', 'temperature', 'pump_level', 'heat_level'
@@ -30,17 +30,44 @@ def main_loop():
     )
     gamma = 1
 
+    hists = {}
+    for val in VALS_TO_TRACK:
+        hists[val] = []
+
     while True:
         state.temperature = gamma * poll_temp() + (1 - gamma) * state.temperature
         state.pressure = gamma * poll_pressure() + (1 - gamma) * state.pressure
 
+        if not SWT_MODE.value():
+            # start collecting data
+            delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
+            state.seconds += delta
+            for name, hist in hists.items():
+                if len(hist) < MAX_STORAGE:
+                    hist.append(getattr(state, name))
+                elif len(hist) == MAX_STORAGE and OVERWRITE:
+                    hist.pop(0)
+                    hist.append(getattr(state, name))
+        else:
+            # save data (if data > 0)
+            state.seconds = 0.
+            state.start = time.ticks_ms()
+            for name, hist in hists.items():
+                if len(hist) > 0:
+                    file = open(f'logs/log_{name}_{time.localtime()}.txt', 'w')
+                    for val in hist:
+                        file.write(f'{str(val)}\n')
+                    file.close()
+
         if not SWT_BREW.value():
             # turn on heat
+            state.pump_level = PUMP_LEVEL
             open_valve()
-            pump_on()
+            set_pump_level(PUMP_LEVEL)
         else:
             # turn off heat
-            pump_off()
+            state.pump_level = 0
+            set_pump_level(0)
             close_valve()
 
         update_display(
@@ -51,7 +78,7 @@ def main_loop():
             state.pres_targ,
             state.total_flow,
             state.seconds,
-            "FLUSH"
+            "TEST"
         )
 
         time.sleep(DELTA)
