@@ -165,7 +165,7 @@ def main_loop():
                     hist.pop(0)
                     hist.append(getattr(state, name))
             elif len(hist) > 0:
-                file = open(f'log_{name}_{time.localtime()}.txt', 'w')
+                file = open(f'logs/log_{name}_{time.localtime()}.txt', 'w')
                 for val in hist:
                     file.write(f'{str(val)}\n')
                 file.close()
