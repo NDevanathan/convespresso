@@ -102,7 +102,7 @@ def main_loop():
         start = time.ticks_ms(),
         seconds = 0.,
         temperature = poll_temp(),
-        temp_targ = BREW_TEMP,
+        temp_targ = BREW_TEMP[0],
         pressure = poll_pressure(),
         pres_targ = 9.,
         flow = 0.,
