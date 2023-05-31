@@ -7,14 +7,14 @@ PRE_INF_LEVEL = 1/4
 RAMP_LEVEL = 1/2
 TOTAL_MASS = [36, 36, 18]
 FLOW_RATE = [1.5, 1.5, 0.75]
-MODES = ["STEAM", "ESPRESSO", "RISTRETTO"]
+MODES = ["STEAM", "DATA OFF", "DATA ON"]
 BREW_TEMP = [130, 90, 90]
-DELTA = 0.06
+DELTA = 0.01
 
 VALS_TO_TRACK = [
     'seconds', 'pressure', 'temperature', 'pump_level', 'heat_level'
 ]
-MAX_STORAGE = 500
+MAX_STORAGE = 50000
 OVERWRITE = True # If false, then data are simply stopped being collected
 
 last_time = None
@@ -123,28 +123,40 @@ def main_loop():
         state.temperature = gamma * poll_temp() + (1 - gamma) * state.temperature
         state.pressure = gamma * poll_pressure() + (1 - gamma) * state.pressure
 
-        mode = SWT_MODE.value()
-        state.flow_targ = FLOW_RATE[mode]
-        state.mass_targ = TOTAL_MASS[mode]
-        state.temp_targ = BREW_TEMP[mode]
+        # mode = SWT_MODE.value()
+        # state.flow_targ = FLOW_RATE[mode]
+        # state.mass_targ = TOTAL_MASS[mode]
+        # state.temp_targ = BREW_TEMP[mode]
 
-        if not SWT_BREW.value() and mode > 0:
-            if brew_mode < 0:
-                brew_mode = 0
-                state.start = time.ticks_ms()
-                state.total_flow = 0.0
-                state.seconds = 0.
-
-            if brew_mode == 0 and state.seconds > PRE_INF_DUR:
-                brew_mode = 1
-
-            elif brew_mode == 1 and state.seconds > PRE_INF_DUR + RAMP_DUR:
-                brew_mode = 2
-
+        if not SWT_MODE.value():
+            # start collecting data
+            delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
+            state.seconds += delta
+            for name, hist in hists.items():
+                if len(hist) < MAX_STORAGE:
+                    hist.append(getattr(state, name))
+                elif len(hist) == MAX_STORAGE and OVERWRITE:
+                    hist.pop(0)
+                    hist.append(getattr(state, name))
         else:
-            brew_mode = -1
+            # save data (if data > 0)
+            state.seconds = 0.
+            state.start = time.ticks_ms()
+            for name, hist in hists.items():
+                if len(hist) > 0:
+                    file = open(f'logs/log_{name}_{time.localtime()}.txt', 'w')
+                    for val in hist:
+                        file.write(f'{str(val)}\n')
+                    file.close()
 
-        state = brew(brew_mode, state)
+        if not SWT_BREW.value():
+            # turn on heat
+            state.heat_level = set_heat_level(1)
+        else:
+            # turn off heat
+            state.heat_level = set_heat_level(0)
+
+        # state = brew(brew_mode, state)
 
         update_display(
             state.temperature,
@@ -154,21 +166,8 @@ def main_loop():
             state.pres_targ,
             state.total_flow,
             state.seconds,
-            MODES[mode]
+            "TEST"
         )
-
-        for name, hist in hists.items():
-            if not SWT_BREW.value() and mode > 0:
-                if len(hist) < MAX_STORAGE:
-                    hist.append(getattr(state, name))
-                elif len(hist) == MAX_STORAGE and OVERWRITE:
-                    hist.pop(0)
-                    hist.append(getattr(state, name))
-            elif len(hist) > 0:
-                file = open(f'logs/log_{name}_{time.localtime()}.txt', 'w')
-                for val in hist:
-                    file.write(f'{str(val)}\n')
-                file.close()
 
         time.sleep(DELTA)
 

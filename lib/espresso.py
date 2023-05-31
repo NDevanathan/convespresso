@@ -89,6 +89,7 @@ def heat_on():
     Turn on the heating element.
     """
     HEAT_PWM.duty_u16(65535)
+    return 1
 
 
 def heat_off():
@@ -96,6 +97,7 @@ def heat_off():
     Turn off the heating element.
     """
     HEAT_PWM.duty_u16(0)
+    return 0
 
 
 def set_heat_level(level: float):
