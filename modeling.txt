@@ -1,0 +1,8 @@
+HEAT DISSIPATION FROM 134.75 C, taking into account the "steam cooling" phase:
+    3/(seconds / 300 + 0.1) + (104.71105103 - 0.01925291 * seconds)
+
+APPROXIMATE HEAT DISSIPATION FROM 100 C:
+    98.91401153 - 0.01933924 * seconds
+
+DELAY FROM HEAT OFF AT 124.5 C TO TEMPERATURE DECREASING:
+    6.974 sec

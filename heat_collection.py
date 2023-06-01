@@ -5,10 +5,10 @@ HEAT_LEVEL = 1
 DELTA = 0.1
 
 VALS_TO_TRACK = [
-    'seconds', 'pressure', 'temperature', 'pump_level', 'heat_level'
+    'seconds', 'temperature', 'heat_level'
 ]
-MAX_STORAGE = 10000
-OVERWRITE = True # If false, then data are simply stopped being collected
+# MAX_STORAGE = 470
+OVERWRITE = False # If false, then data are simply stopped being collected
 
 
 def main_loop():
@@ -34,6 +34,8 @@ def main_loop():
     for val in VALS_TO_TRACK:
         hists[val] = []
 
+    runtime = time.time_ns()
+
     while True:
         state.temperature = gamma * poll_temp() + (1 - gamma) * state.temperature
         state.pressure = gamma * poll_pressure() + (1 - gamma) * state.pressure
@@ -42,22 +44,32 @@ def main_loop():
             # start collecting data
             delta = (time.ticks_diff(time.ticks_ms(), state.start) / 1000) - state.seconds
             state.seconds += delta
-            for name, hist in hists.items():
-                if len(hist) < MAX_STORAGE:
-                    hist.append(getattr(state, name))
-                elif len(hist) == MAX_STORAGE and OVERWRITE:
-                    hist.pop(0)
-                    hist.append(getattr(state, name))
-        else:
-            # save data (if data > 0)
-            state.seconds = 0.
-            state.start = time.ticks_ms()
-            for name, hist in hists.items():
-                if len(hist) > 0:
-                    file = open(f'logs/log_{name}_{time.localtime()}.txt', 'w')
-                    for val in hist:
-                        file.write(f'{str(val)}\n')
-                    file.close()
+            for name in VALS_TO_TRACK:
+                val = getattr(state, name)
+                file = open(f'logs/log_{name}_{runtime}.txt', 'a')
+                file.write(f'{str(val)}\n')
+                file.close()
+                # if len(hist) < MAX_STORAGE:
+                #     hist.append(getattr(state, name))
+                # elif len(hist) == MAX_STORAGE and OVERWRITE:
+                #     hist.pop(0)
+                #     hist.append(getattr(state, name))
+                # elif len(hist) == MAX_STORAGE:
+                #     file = open(f'logs/log_{name}_{time.localtime()}.txt', 'w')
+                #     for val in hist:
+                #         file.write(f'{str(val)}\n')
+                #     file.close()
+                #     hists[name] = []
+        # else:
+        #     # save data (if data > 0)
+        #     state.seconds = 0.
+        #     state.start = time.ticks_ms()
+        #     for name, hist in hists.items():
+        #         if len(hist) > 0:
+        #             file = open(f'logs/log_{name}_{time.localtime()}.txt', 'w')
+        #             for val in hist:
+        #                 file.write(f'{str(val)}\n')
+        #             file.close()
 
         if not SWT_BREW.value():
             # turn on heat

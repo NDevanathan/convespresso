@@ -2,8 +2,6 @@ import time
 from espresso import *
 
 DELTA = 0.1
-MAX_STORAGE = 10000
-OVERWRITE = True # If false, then data are simply stopped being collected
 
 
 def main_loop():
