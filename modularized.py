@@ -1,19 +1,17 @@
 import time
 from espresso import *
 
-PRE_INF_DUR = 8
+PRE_INF_DUR = 12
 RAMP_DUR = 5
 PRE_INF_LEVEL = 1/4
 RAMP_LEVEL = 1/2
 TOTAL_MASS = [36, 36, 18]
 FLOW_RATE = [1.5, 1.5, 0.75]
 MODES = ["STEAM", "ESPRESSO", "RISTRETTO"]
-BREW_TEMP = [130, 90, 90]
+BREW_TEMP = [130, 96, 96]
 DELTA = 0.06
 
-VALS_TO_TRACK = [
-    'seconds', 'pressure', 'temperature', 'pump_level', 'heat_level'
-]
+
 MAX_STORAGE = 500
 OVERWRITE = True # If false, then data are simply stopped being collected
 
@@ -46,7 +44,7 @@ def temp_control(
 
     control = alpha*proportional + beta*integral + gamma*derivative
 
-    state.heat_level = set_heat_level(control)
+    set_heat_level(control)
     #return curr_time, error, integral
 
 def pre_infuse(state):
@@ -115,15 +113,11 @@ def main_loop():
     gamma = 1
     brew_mode = -1
 
-    hists = {}
-    for val in VALS_TO_TRACK:
-        hists[val] = []
-
     while True:
         state.temperature = gamma * poll_temp() + (1 - gamma) * state.temperature
         state.pressure = gamma * poll_pressure() + (1 - gamma) * state.pressure
 
-        mode = SWT_MODE.value()
+        mode = SWT_MODE.value() + 1
         state.flow_targ = FLOW_RATE[mode]
         state.mass_targ = TOTAL_MASS[mode]
         state.temp_targ = BREW_TEMP[mode]
@@ -156,19 +150,6 @@ def main_loop():
             state.seconds,
             MODES[mode]
         )
-
-        for name, hist in hists.items():
-            if not SWT_BREW.value() and mode > 0:
-                if len(hist) < MAX_STORAGE:
-                    hist.append(getattr(state, name))
-                elif len(hist) == MAX_STORAGE and OVERWRITE:
-                    hist.pop(0)
-                    hist.append(getattr(state, name))
-            elif len(hist) > 0:
-                file = open(f'logs/log_{name}_{time.localtime()}.txt', 'w')
-                for val in hist:
-                    file.write(f'{str(val)}\n')
-                file.close()
 
         time.sleep(DELTA)
 

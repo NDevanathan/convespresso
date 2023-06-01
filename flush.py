@@ -1,12 +1,7 @@
 import time
 from espresso import *
 
-HEAT_LEVEL = 1
 DELTA = 0.1
-
-VALS_TO_TRACK = [
-    'seconds', 'pressure', 'temperature', 'pump_level', 'heat_level'
-]
 MAX_STORAGE = 10000
 OVERWRITE = True # If false, then data are simply stopped being collected
 
