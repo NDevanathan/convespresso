@@ -1,7 +1,7 @@
 import time
 from espresso import *
 
-PRE_INF_DUR = 12
+PRE_INF_DUR = 10
 RAMP_DUR = 5
 PRE_INF_LEVEL = 1/4
 RAMP_LEVEL = 1/2
