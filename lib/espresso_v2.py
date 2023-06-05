@@ -51,34 +51,21 @@ flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
 
 class BrewState:
     def __init__(self,
-        start:       time.ticks_ms,
-        seconds:     float,
-        temperature: float,
-        temp_targ:   float,
-        pressure:    float,
-        pres_targ:   float,
-        flow:        float,
-        flow_targ:   float,
-        total_flow:  float,
-        mass_targ:   float,
-        pump_level:  float,
-        heat_level:  float):
+        temperature: float = 25.,
+        pressure   : float =  1.,
+        flow       : float =  0.,
+        pump_level : float =  0.,
+        heat_level : float =  0.):
 
-        self.start       = start
-        self.seconds     = seconds
         self.temperature = temperature
-        self.temp_targ   = temp_targ
         self.pressure    = pressure
-        self.pres_targ   = pres_targ
         self.flow        = flow
-        self.flow_targ   = flow_targ
-        self.total_flow  = total_flow
-        self.mass_targ   = mass_targ
         self.pump_level  = pump_level
         self.heat_level  = heat_level
 
+
 class EspressoMachine():
-    def __init__(self, state: BrewState):
+    def __init__(self, state: BrewState = BrewState()):
         self.state = state
 
     def poll_temp(self):
@@ -200,13 +187,13 @@ class EspressoMachine():
         display.clear()
 
 
-    def update_display(self, mode: str):
+    def update_display(self, mode, temp_targ, pres_targ, mass_targ, sec):
         """
         Update the display with the current temperature, pressure, flow, and timer values, as well as their respective target values.
         """
         display.clear_buffers()
         trackers = [self.state.temperature, self.state.pressure, self.state.flow]
-        targets = [self.state.temp_targ, self.state.pres_targ, self.state.mass_targ]
+        targets = [temp_targ, pres_targ, mass_targ]
 
         headers = ["TEMP.", "PRES.", "FLOW."]
         values = ["{0:.1f}".format(val) for val in trackers]

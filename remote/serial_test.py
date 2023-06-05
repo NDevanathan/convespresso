@@ -1,9 +1,8 @@
+from multiprocessing import Process
+
 from lib.controller import Controller
 
+FREQ   = 60 #Hz
+PERIOD = 1/FREQ #seconds
+
 pico_comms = Controller()
-pico_comms.send("adjust_temp(83.)")
-print(pico_comms.receive())
-print(pico_comms.receive())
-print(pico_comms.receive())
-print(pico_comms.receive())
-print(pico_comms.receive())
