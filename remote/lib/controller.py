@@ -35,7 +35,9 @@ class Controller:
         self.serial.close()
         
     def poll_state(self):
-        pass
+        self.send("get_state()")
+        reply = self.receive()
+        return [float(r) for r in reply.split("\n")]
         
-    def send_action(self, action: Action):
-        pass
+    def send_action(self, heat_level: float, pump_level: float):
+        self.send("get_state({},{})".format(heat_level, pump_level))

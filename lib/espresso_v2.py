@@ -50,32 +50,18 @@ temp_probe = MAX6675(sck=TEMP_SCK, cs=TEMP_CS, so=TEMP_SO)
 flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
 
 class BrewState:
-    def __init__(self,
-        start:       time.ticks_ms,
-        seconds:     float,
-        temperature: float,
-        temp_targ:   float,
-        pressure:    float,
-        pres_targ:   float,
-        flow:        float,
-        flow_targ:   float,
-        total_flow:  float,
-        mass_targ:   float,
-        pump_level:  float,
-        heat_level:  float):
-
-        self.start       = start
-        self.seconds     = seconds
-        self.temperature = temperature
-        self.temp_targ   = temp_targ
-        self.pressure    = pressure
-        self.pres_targ   = pres_targ
-        self.flow        = flow
-        self.flow_targ   = flow_targ
-        self.total_flow  = total_flow
-        self.mass_targ   = mass_targ
-        self.pump_level  = pump_level
-        self.heat_level  = heat_level
+    start:       time.ticks_ms,
+    seconds:     float,
+    temperature: float,
+    temp_targ:   float,
+    pressure:    float,
+    pres_targ:   float,
+    flow:        float,
+    flow_targ:   float,
+    total_flow:  float,
+    mass_targ:   float,
+    pump_level:  float,
+    heat_level:  float
 
 class EspressoMachine():
     def __init__(self, state: BrewState):

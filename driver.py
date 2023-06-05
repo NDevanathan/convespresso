@@ -17,7 +17,8 @@ em = EspressoMachine(BrewState(
 ))
 
 def get_state():
-    print(em.poll_temp(), 
+    print(
+        em.poll_temp(), 
         em.poll_pressure(), 
         em.state.heat_level, 
         em.state.pump_level
