@@ -1,5 +1,17 @@
 import serial
 
+@dataclass
+class State:
+    temperature: float,
+    pressure: float:,
+    heat_level: float,
+    pump_level: float
+
+@dataclass
+class Action:
+    heat_level: float,
+    pump_level: float
+
 class Controller:
     TERMINATOR = '\r'.encode('UTF8')
 
@@ -21,3 +33,9 @@ class Controller:
 
     def close(self):
         self.serial.close()
+        
+    def poll_state(self):
+        pass
+        
+    def send_action(self, action: Action):
+        pass
