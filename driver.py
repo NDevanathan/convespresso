@@ -16,3 +16,6 @@ def take_action(heat_level, pump_level):
 
 def refresh_display(mode, temp_targ, pres_targ, mass_targ, sec):
     em.update_display(mode, temp_targ, pres_targ, mass_targ, sec)
+    
+def close_valve():
+    em.close_valve()
