@@ -7,8 +7,6 @@ from lib.controller import Controller
 FREQ   = 60 #Hz
 PERIOD = dt.timedelta(seconds=1/FREQ) #seconds
 
-pico_comms = Controller()
-
 class CommProcess(Process):
     def __init__(self, act_pipe, targ_pipe, state_queue, brew_event, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -41,6 +39,7 @@ class CommProcess(Process):
                 self.targets[2], 
                 (next-start).total_seconds()
             )
+            print(next)
             next += PERIOD
             pause.until(next)
             
@@ -51,7 +50,7 @@ class ControlProcess(Process):
         self.targ_pipe = targ_pipe
         self.state_queue = state_queue
 
-if name == '__main__':
+if __name__ == '__main__':
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
     state_queue = Queue()
