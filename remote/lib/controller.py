@@ -1,17 +1,5 @@
 import serial
 
-@dataclass
-class State:
-    temperature: float,
-    pressure: float:,
-    heat_level: float,
-    pump_level: float
-
-@dataclass
-class Action:
-    heat_level: float,
-    pump_level: float
-
 class Controller:
     TERMINATOR = '\r'.encode('UTF8')
 
@@ -34,10 +22,13 @@ class Controller:
     def close(self):
         self.serial.close()
         
-    def poll_state(self):
+    def get_state(self):
         self.send("get_state()")
         reply = self.receive()
-        return [float(r) for r in reply.split("\n")]
+        return [float(r) for r in reply.split(" ")]
         
-    def send_action(self, heat_level: float, pump_level: float):
-        self.send("get_state({},{})".format(heat_level, pump_level))
+    def take_action(self, heat_level: float, pump_level: float):
+        self.send("take_action({},{})".format(heat_level, pump_level))
+        
+    def refresh_display(self, mode, temp_targ, pres_targ, mass_targ, sec):
+        self.send("refresh_display('{}',{},{},{},{})".format(mode, temp_targ, pres_targ, mass_targ, sec))
