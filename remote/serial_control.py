@@ -6,7 +6,8 @@ from multiprocessing import Process, Pipe, Queue, Event
 from lib.controller import Controller
 
 FREQ   = 60 #Hz
-PERIOD = dt.timedelta(seconds=1/FREQ) #seconds
+PERIOD = 1/FREQ
+DELTA = dt.timedelta(seconds=PERIOD) #seconds
 
 class CommProcess(Process):
     def __init__(self, act_pipe, targ_pipe, state_queue, brew_event, *args, **kwargs):
@@ -23,17 +24,18 @@ class CommProcess(Process):
         start = dt.datetime.now()
         next = start
         while True:
-            if self.brew_event:
-                self.state_queue.put(self.comms.get_state(), block=True)
-                if self.act_pipe.poll():
-                    self.action = self.act_pipe.recv()
-                if self.targ_pipe.poll():
-                    self.targets = self.targ_pipe.recv()
-                self.comms.take_action(self.action[0],self.action[1])
-            else:
+            self.state_queue.put(self.comms.get_state())
+            if self.targ_pipe.poll():
+                self.targets = self.targ_pipe.recv()
+            if self.act_pipe.poll():
+                self.action = self.act_pipe.recv()
+            
+            if not self.brew_event.is_set():
                 start = next
+                self.action[1] = 0.
                 self.comms.close_valve()
                 
+            self.comms.take_action(self.action[0],self.action[1])
             self.comms.refresh_display(
                 'ESPRESSO', 
                 self.targets[0], 
@@ -41,7 +43,8 @@ class CommProcess(Process):
                 self.targets[2], 
                 (next-start).total_seconds()
             )
-            next += PERIOD
+            print(dt.datetime.now())
+            next += DELTA
             pause.until(next)
             
 class ControlProcess(Process):
@@ -67,20 +70,21 @@ class ControlProcess(Process):
         target = self.targets[0]
         curr_temp = self.state[0]
     
-        alpha = 1/5
-        beta = 1/2000
-        gamma = 1/20
+        alpha = 1/30
+        beta = 1/10000
+        gamma = 1/50
 
         error = target - curr_temp
 
         proportional = error
         derivative = 0.
-        integral = last_integral
+        integral = self.last_integral
 
-        if not (last_error is None):
-            derivative = (error - last_error) / PERIOD
-            integral += last_error * PERIOD
-
+        if not (self.last_error is None):
+            derivative = (error - self.last_error) / PERIOD
+            integral += self.last_error * PERIOD
+        
+        self.last_error = error
         return alpha*proportional + beta*integral + gamma*derivative
         
     def flow_control(self, secs):
@@ -101,14 +105,15 @@ class ControlProcess(Process):
             action = [0., 0.]
             action[0] = self.temp_control(next - start)
             
-            if self.brew_event:
+            if self.brew_event.is_set():
                 action[1] = self.flow_control(next - start)
             else:
                 self.targets[2] = 0
+                start = next
             
-            act_pipe.send(action)
-            targ_pipe.send(self.targets)
-            next += PERIOD
+            self.act_pipe.send(action)
+            self.targ_pipe.send(self.targets)
+            next += DELTA
             pause.until(next)
 
 if __name__ == '__main__':
@@ -119,3 +124,4 @@ if __name__ == '__main__':
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
     cont_proc = ControlProcess(act_pipe_cont, targ_pipe_cont, state_queue, brew_event)
     comm_proc.start()
+    cont_proc.start()

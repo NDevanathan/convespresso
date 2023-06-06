@@ -23,8 +23,9 @@ class Controller:
         self.serial.close()
         
     def get_state(self):
+        self.serial.reset_input_buffer()
+        self.serial.reset_output_buffer()
         self.send("get_state()")
-        reply = self.receive()
         return [float(r) for r in reply.split(" ")]
         
     def take_action(self, heat_level: float, pump_level: float):
