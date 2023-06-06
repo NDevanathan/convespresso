@@ -27,6 +27,7 @@ class CommProcess(Process):
         i = 0
         start = dt.datetime.now()
         next = start
+        brew_time = 0
         
         while True:
             self.state_queue.put(self.comms.get_state())
@@ -39,6 +40,8 @@ class CommProcess(Process):
                 start = next
                 self.action[1] = 0.
                 self.comms.close_valve()
+            else:
+                brew_time = (next-start).total_seconds()
 
             self.comms.take_action(self.action[0],self.action[1])
             if i % PERIODS_PER_FRAME == 0: self.comms.refresh_display(
@@ -46,7 +49,7 @@ class CommProcess(Process):
                 self.targets[0],
                 self.targets[1],
                 self.targets[2],
-                (next-start).total_seconds()
+                brew_time
             )
             
             i += 1
@@ -145,11 +148,16 @@ class PID(Controller):
         return alpha*proportional + beta*integral + gamma*derivative
 
     def flow_control(self, secs):
+        if secs <= 10:
+            return 1/4
+        elif secs <= 15:
+            return 1/2
+        
         flow = self.calc_flow()
-        pump_level = (2 * pump_level / flow) ** (0.5)
+        pump_level = (1.5 * self.state[3] / flow) ** (0.5)
 
         if pump_level > 3/4: pump_level = 3/4
-        self.targets[3] += flow * PERIOD
+        self.targets[2] += flow * PERIOD
         return pump_level
 
     def run(self):
@@ -160,10 +168,10 @@ class PID(Controller):
                 self.state = self.state_queue.get()
 
             action = [0., 0.]
-            action[0] = self.temp_control(next - start)
+            action[0] = self.temp_control((next-start).total_seconds())
 
             if self.brew_event.is_set():
-                action[1] = self.flow_control(next - start)
+                action[1] = self.flow_control((next-start).total_seconds())
             else:
                 self.targets[2] = 0
                 start = next
@@ -183,6 +191,10 @@ if __name__ == '__main__':
     cont_proc = PID(act_pipe_cont, targ_pipe_cont, state_queue, brew_event)
     comm_proc.start()
     cont_proc.start()
+    input("Hit ENTER to start brewing.")
+    brew_event.set()
+    input("Hit ENTER to stop brewing.")
+    brew_event.clear()
     # act_pipe_cont, act_pipe_comm = Pipe()
     # targ_pipe_cont, targ_pipe_comm = Pipe()
     # raw_state_queue = Queue()
