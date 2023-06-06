@@ -1,6 +1,7 @@
 import serial
 
-class Controller:
+
+class SerialCourier:
     TERMINATOR = '\r'.encode('UTF8')
 
     def __init__(self, timeout=1):
@@ -23,7 +24,7 @@ class Controller:
 
     def close(self):
         self.serial.close()
-        
+
     def get_state(self):
         self.serial.reset_input_buffer()
         self.serial.reset_output_buffer()
@@ -31,7 +32,7 @@ class Controller:
         self.receive()
         reply = self.receive()
         return [float(r) for r in reply.split(" ")]
-        
+
     def take_action(self, heat_level: float, pump_level: float):
         self.send("take_action({},{})".format(heat_level, pump_level))
         self.serial.reset_input_buffer()
