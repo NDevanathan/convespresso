@@ -6,11 +6,12 @@ import cvxpy as cp
 import numpy as np
 import pause
 
-from remote.lib.serial_courier import SerialCourier
+from lib.serial_courier import SerialCourier
 
 FREQ   = 60 #Hz
 PERIOD = 1/FREQ
 DELTA = dt.timedelta(seconds=PERIOD) #seconds
+PERIODS_PER_FRAME = 15
 
 class CommProcess(Process):
     def __init__(self, act_pipe, targ_pipe, state_queue, brew_event, *args, **kwargs):
@@ -24,29 +25,35 @@ class CommProcess(Process):
         self.targets = [95., 9., 0.]
 
     def run(self):
+        i = 0
         start = dt.datetime.now()
         next = start
+        brew_time = 0
+
         while True:
             self.state_queue.put(self.comms.get_state())
-            if self.targ_pipe.poll():
+            while self.targ_pipe.poll():
                 self.targets = self.targ_pipe.recv()
-            if self.act_pipe.poll():
+            while self.act_pipe.poll():
                 self.action = self.act_pipe.recv()
 
             if not self.brew_event.is_set():
                 start = next
                 self.action[1] = 0.
                 self.comms.close_valve()
+            else:
+                brew_time = (next-start).total_seconds()
 
             self.comms.take_action(self.action[0],self.action[1])
-            self.comms.refresh_display(
+            if i % PERIODS_PER_FRAME == 0: self.comms.refresh_display(
                 'ESPRESSO',
                 self.targets[0],
                 self.targets[1],
                 self.targets[2],
-                (next-start).total_seconds()
+                brew_time
             )
-            print(dt.datetime.now())
+
+            i += 1
             next += DELTA
             pause.until(next)
 
@@ -121,9 +128,9 @@ class PID(Controller):
         target = self.targets[0]
         curr_temp = self.state[0]
 
-        alpha = 1/30
-        beta = 1/10000
-        gamma = 1/50
+        alpha = 1/15
+        beta = 1/5000
+        gamma = 1/20
 
         error = target - curr_temp
 
@@ -139,11 +146,16 @@ class PID(Controller):
         return alpha*proportional + beta*integral + gamma*derivative
 
     def flow_control(self, secs):
+        if secs <= 10:
+            return 1/4
+        elif secs <= 15:
+            return 1/2
+
         flow = self.calc_flow()
-        pump_level = (2 * pump_level / flow) ** (0.5)
+        pump_level = (1.5 * self.state[3] / flow) ** (0.5)
 
         if pump_level > 3/4: pump_level = 3/4
-        self.targets[3] += flow * PERIOD
+        self.targets[2] += flow * PERIOD
         return pump_level
 
     def run(self):
@@ -154,10 +166,76 @@ class PID(Controller):
                 self.state = self.state_queue.get()
 
             action = [0., 0.]
-            action[0] = self.temp_control(next - start)
+            action[0] = self.temp_control((next-start).total_seconds())
 
             if self.brew_event.is_set():
-                action[1] = self.flow_control(next - start)
+                action[1] = self.flow_control((next-start).total_seconds())
+            else:
+                self.targets[2] = 0
+                start = next
+
+            self.act_pipe.send(action)
+            self.targ_pipe.send(self.targets)
+            next += DELTA
+            pause.until(next)
+
+
+class IndependentMRAC(Controller):
+    def __init__(self, Am, Bm, cm, filter, kx, kr, gamma, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # We assume Am, Bm, cm, kx, kr, gamma are numpy arrays.
+        # Each contains a hyperparameter for temperature first and
+        # for pressure second.
+        self.Am = Am
+        self.Bm = Bm
+        self.cm = cm
+
+        self.kx = kx
+        self.kr = kr
+        self.gamma = gamma
+
+        self.filter = filter
+        self.r = None
+
+    def temp_control(self, secs):
+        # Implement MRAC temperature control method here
+        return self.controls[0]
+
+    def flow_control(self, secs):
+        # Implement MRAC flow control method here
+        return self.controls[1]
+
+    def update_model(self):
+        # Implement MRAC model update method here
+        err = self.state - self.targets[:2]
+        self.kx += -self.gamma * err * self.state * DELTA
+        self.kr += -self.gamma * err * self.r * DELTA
+        self.controls = self.kx * self.state + self.kr * self.r
+
+    def compute_reference(self):
+        r_cvx = cp.Variable()
+
+    def run(self):
+        start = dt.datetime.now()
+        next = start
+        while True:
+            while not self.state_queue.empty():
+                obs = self.state_queue.get()
+                self.state = self.filter.apply(dt=DELTA, value=obs)
+
+            # Compute a reference signal if necessary
+            if self.r is None:
+                self.compute_reference()
+
+            # Update MRAC model parameters if necessary
+            self.update_model()
+
+            action = [0., 0.]
+            action[0] = self.temp_control((next-start).total_seconds())
+
+            if self.brew_event.is_set():
+                action[1] = self.flow_control((next-start).total_seconds())
             else:
                 self.targets[2] = 0
                 start = next
@@ -243,3 +321,23 @@ if __name__ == '__main__':
     cont_proc = IndependentMRAC(act_pipe_cont, targ_pipe_cont, state_queue, brew_event)
     comm_proc.start()
     cont_proc.start()
+    input("Hit ENTER to start brewing.")
+    brew_event.set()
+    input("Hit ENTER to stop brewing.")
+    brew_event.clear()
+    # act_pipe_cont, act_pipe_comm = Pipe()
+    # targ_pipe_cont, targ_pipe_comm = Pipe()
+    # raw_state_queue = Queue()
+    # filtered_state_queue = Queue()
+    # brew_event = Event()
+
+    # alpha_per_second = 0.8
+    # filter_obj = LowPassFilter(alpha_per_second)
+
+    # comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, raw_state_queue, brew_event)
+    # filter_proc = FilterProcess(raw_state_queue, filtered_state_queue, filter_obj)
+    # cont_proc = PID(act_pipe_cont, targ_pipe_cont, filtered_state_queue, brew_event)
+
+    # comm_proc.start()
+    # filter_proc.start()
+    # cont_proc.start()
