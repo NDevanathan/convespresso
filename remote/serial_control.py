@@ -54,17 +54,22 @@ class ControlProcess(Process):
         self.state = np.zeros(4)
         
         self.targets = [94.5, 9., 0.]
+        self.flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
         
         self.last_error = None
         self.last_integral = 0.
+        
+    def calc_flow(self):
+        full_flow = sum([flow_coefs[i] * self.state[1]**i for i in range(len(flow_coefs))]) / 60
+        return full_flow * self.state[3]
         
     def temp_control(self, secs):
         target = self.targets[0]
         curr_temp = self.state[0]
     
         alpha = 1/5
-        beta = (1/2000)
-        gamma = (1/20)
+        beta = 1/2000
+        gamma = 1/20
 
         error = target - curr_temp
 
@@ -79,7 +84,12 @@ class ControlProcess(Process):
         return alpha*proportional + beta*integral + gamma*derivative
         
     def flow_control(self, secs):
-        return 1/2
+        flow = self.calc_flow()
+        pump_level = (2 * pump_level / flow) ** (0.5)
+
+        if pump_level > 3/4: pump_level = 3/4
+        self.targets[3] += flow * PERIOD
+        return pump_level
         
     def run(self):
         start = dt.datetime.now()
@@ -89,10 +99,10 @@ class ControlProcess(Process):
                 self.state = state_queue.get()
         
             action = [0., 0.]
-            action[0] = self.temp_control(next-start)
+            action[0] = self.temp_control(next - start)
             
             if self.brew_event:
-                action[1] = self.flow_control(next-start)
+                action[1] = self.flow_control(next - start)
             else:
                 self.targets[2] = 0
             

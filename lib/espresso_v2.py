@@ -24,13 +24,13 @@ SCR_RST   = Pin(6)  # Not connected (placeholder)
 
 # Define pins for the sensors, heater, pump, and valve
 PRS_SENS  = ADC(28)
-HEAT_PWM  = PWM(Pin(9, Pin.OUT), freq=10)
+HEAT_PWM  = PWM(Pin(9, Pin.OUT), freq=600)
 SOL_CTRL  = Pin(22, Pin.OUT)
 TEMP_SCK  = Pin(2, Pin.OUT)
 TEMP_CS   = Pin(1, Pin.OUT)
 TEMP_SO   = Pin(0, Pin.OUT)
 PUMP_ZC   = Pin(8, Pin.IN)
-PUMP_PWM  = PWM(Pin(7, Pin.OUT), freq=10)
+PUMP_PWM  = PWM(Pin(7, Pin.OUT), freq=600)
 
 # Define display settings
 FONT    = XglcdFont('res/FixedFont5x8.c', 5, 8)
