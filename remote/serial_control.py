@@ -10,6 +10,7 @@ from lib.serial_courier import SerialCourier
 FREQ   = 60 #Hz
 PERIOD = 1/FREQ
 DELTA = dt.timedelta(seconds=PERIOD) #seconds
+PERIODS_PER_FRAME = 15
 
 class CommProcess(Process):
     def __init__(self, act_pipe, targ_pipe, state_queue, brew_event, *args, **kwargs):
@@ -23,13 +24,15 @@ class CommProcess(Process):
         self.targets = [95., 9., 0.]
 
     def run(self):
+        i = 0
         start = dt.datetime.now()
         next = start
+        
         while True:
             self.state_queue.put(self.comms.get_state())
-            if self.targ_pipe.poll():
+            while self.targ_pipe.poll():
                 self.targets = self.targ_pipe.recv()
-            if self.act_pipe.poll():
+            while self.act_pipe.poll():
                 self.action = self.act_pipe.recv()
 
             if not self.brew_event.is_set():
@@ -38,14 +41,15 @@ class CommProcess(Process):
                 self.comms.close_valve()
 
             self.comms.take_action(self.action[0],self.action[1])
-            self.comms.refresh_display(
+            if i % PERIODS_PER_FRAME == 0: self.comms.refresh_display(
                 'ESPRESSO',
                 self.targets[0],
                 self.targets[1],
                 self.targets[2],
                 (next-start).total_seconds()
             )
-            print(dt.datetime.now())
+            
+            i += 1
             next += DELTA
             pause.until(next)
 
@@ -123,9 +127,9 @@ class PID(Controller):
         target = self.targets[0]
         curr_temp = self.state[0]
 
-        alpha = 1/30
-        beta = 1/10000
-        gamma = 1/50
+        alpha = 1/15
+        beta = 1/5000
+        gamma = 1/20
 
         error = target - curr_temp
 
