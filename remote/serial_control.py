@@ -5,7 +5,7 @@ from multiprocessing import Event, Pipe, Process, Queue
 import numpy as np
 import pause
 
-from remote.lib.serial_courier import SerialCourier
+from lib.serial_courier import SerialCourier
 
 FREQ   = 60 #Hz
 PERIOD = 1/FREQ

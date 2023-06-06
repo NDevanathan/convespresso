@@ -1,5 +1,6 @@
 # Import necessary libraries and modules
 import time
+import _thread
 from machine import Pin, SPI, ADC, PWM
 from ssd1309 import Display
 from max6675 import MAX6675
@@ -63,16 +64,18 @@ class BrewState:
         self.pump_level  = pump_level
         self.heat_level  = heat_level
 
-
 class EspressoMachine():
     def __init__(self, state: BrewState = BrewState()):
         self.state = state
+        self.spi1        = SPI(1, baudrate=10000000, sck=SCR_SCK, mosi=SCR_MOSI)
+        self.display     = Display(self.spi1, dc=SCR_DC, cs=SCR_CS, rst=SCR_RST)
+        self.temp_probe  = MAX6675(sck=TEMP_SCK, cs=TEMP_CS, so=TEMP_SO)
 
     def poll_temp(self):
         """
         Read the current temperature from the temperature probe in Celcius.
         """
-        self.state.temperature = temp_probe.read()
+        self.state.temperature = self.temp_probe.read()
         return self.state.temperature
 
 
@@ -174,6 +177,7 @@ class EspressoMachine():
         """
         Close the solenoid valve.
         """
+        self.pump_off()
         SOL_CTRL.off()
 
 
@@ -191,7 +195,45 @@ class EspressoMachine():
         """
         Update the display with the current temperature, pressure, flow, and timer values, as well as their respective target values.
         """
-        display.clear_buffers()
+        
+        def subroutine(d, m, temperature, pressure, flow, t_targ, p_targ, m_targ, s):
+            d.clear_buffers()
+            trackers = [temperature, pressure, flow]
+            targets = [t_targ, p_targ, m_targ]
+
+            headers = ["TEMP.", "PRES.", "FLOW."]
+            values = ["{0:.1f}".format(val) for val in trackers]
+            targets = ["{0:.1f}".format(val) for val in targets]
+            offset = 0
+
+            for i in range(3):
+                d.draw_text(START_X - offset, START_Y, headers[i], FONT, rotate=180)
+                d.draw_text(START_X - offset - 6 * (5 - len(values[i])), 
+                    START_Y - 10, values[i], FONT, rotate=180)
+                d.draw_text(START_X - offset - 6 * (5 - len(targets[i])), 
+                    START_Y - 20, targets[i], FONT, rotate=180)
+                
+                offset += 39
+
+            sec_str = "{0:.1f}".format(s)
+            d.draw_text(START_X - 20, START_Y - 32, "TIME:", FONT, rotate=180)
+            d.draw_text(START_X - 60 - 6 * (5 - len(sec_str)), START_Y - 32, sec_str, FONT, rotate=180)
+            d.draw_text(WIDTH//2 + 3 * (len(m)), START_Y - 42, m, FONT, rotate=180)
+            d.present()
+            
+         	
+        display_thread = _thread.start_new_thread(
+            subroutine,
+            (
+                self.display, mode, 
+                self.state.temperature, 
+                self.state.pressure, 
+                self.state.flow, temp_targ, 
+                pres_targ, mass_targ, sec
+            )            
+        )
+        
+        '''self.display.clear_buffers()
         trackers = [self.state.temperature, self.state.pressure, self.state.flow]
         targets = [temp_targ, pres_targ, mass_targ]
 
@@ -201,13 +243,13 @@ class EspressoMachine():
         offset = 0
 
         for i in range(3):
-            display.draw_text(START_X - offset, START_Y, headers[i], FONT, rotate=180)
-            display.draw_text(START_X - offset - 6 * (5 - len(values[i])), START_Y - 10, values[i], FONT, rotate=180)
-            display.draw_text(START_X - offset - 6 * (5 - len(targets[i])), START_Y - 20, targets[i], FONT, rotate=180)
+            self.display.draw_text(START_X - offset, START_Y, headers[i], FONT, rotate=180)
+            self.display.draw_text(START_X - offset - 6 * (5 - len(values[i])), START_Y - 10, values[i], FONT, rotate=180)
+            self.display.draw_text(START_X - offset - 6 * (5 - len(targets[i])), START_Y - 20, targets[i], FONT, rotate=180)
             offset += 39
 
         sec_str = "{0:.1f}".format(sec)
-        display.draw_text(START_X - 20, START_Y - 32, "TIME:", FONT, rotate=180)
-        display.draw_text(START_X - 60 - 6 * (5 - len(sec_str)), START_Y - 32, sec_str, FONT, rotate=180)
-        display.draw_text(WIDTH//2 + 3 * (len(mode)), START_Y - 42, mode, FONT, rotate=180)
-        display.present()
+        self.display.draw_text(START_X - 20, START_Y - 32, "TIME:", FONT, rotate=180)
+        self.display.draw_text(START_X - 60 - 6 * (5 - len(sec_str)), START_Y - 32, sec_str, FONT, rotate=180)
+        self.display.draw_text(WIDTH//2 + 3 * (len(mode)), START_Y - 42, mode, FONT, rotate=180)
+        self.display.present()'''
