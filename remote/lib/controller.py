@@ -10,7 +10,8 @@ class Controller:
     def send(self, text: str):
         line = '%s\r\f' % text
         self.serial.write(line.encode('utf-8'))
-        reply = self.receive()
+        ## reply = self.receive()
+        
         #reply = reply.replace('>>> ','') # lines after first will be prefixed by a propmt
         #if reply != text: # the line should be echoed, so the result should match
         #    raise ValueError('expected %s got %s' % (text, reply))
