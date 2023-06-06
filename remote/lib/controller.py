@@ -34,6 +34,4 @@ class Controller:
         self.send("refresh_display('{}',{},{},{},{})".format(mode, temp_targ, pres_targ, mass_targ, sec))
         
     def close_valve(self):
-        self.send("get_state()")
-        reply = self.receive()
-        return [float(r) for r in reply.split(" ")]
+        self.send("close_valve()")
