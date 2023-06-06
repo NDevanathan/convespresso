@@ -1,14 +1,14 @@
 import time
 from espresso import *
 
-PRE_INF_DUR = 10
+PRE_INF_DUR = 6
 RAMP_DUR = 5
 PRE_INF_LEVEL = 1/4
 RAMP_LEVEL = 1/2
 TOTAL_MASS = [36, 36, 18]
 FLOW_RATE = [1.5, 1.5, 0.75]
 MODES = ["STEAM", "ESPRESSO", "RISTRETTO"]
-BREW_TEMP = [130, 94.5, 94.5]
+BREW_TEMP = [130, 92, 92]
 DELTA = 0.06
 
 
