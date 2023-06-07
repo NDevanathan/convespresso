@@ -271,12 +271,19 @@ class IndependentMRAC(Controller):
 
 
 if __name__ == '__main__':
+    Am = np.array([0.99858532, 0.98670402])
+    Bm = np.array([0.34, 0.18148648])
+    cm = np.array([0.0332, 0.])
+
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
     state_queue = Queue()
     brew_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
-    cont_proc = IndependentMRAC(act_pipe_cont, targ_pipe_cont, state_queue, brew_event)
+    filter = LowPassFilter(0.8)
+    cont_proc = IndependentMRAC(
+        Am, Bm, cm, filter, np.ones(2), np.ones(2), 2., act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+    )
     comm_proc.start()
     cont_proc.start()
     input("Hit ENTER to start brewing.")
