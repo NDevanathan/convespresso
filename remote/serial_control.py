@@ -190,11 +190,15 @@ class IndependentMRAC(Controller):
 
         self.filter = filter
         self.targets = np.array(self.targets[:2])
+        self.state = np.zeros(2)
         self.r = np.array([], dtype=np.dtype('float64'))
         self.rt = None
 
         self.Ktemp = solve_discrete_are(Am[0], Bm[0], np.eye(1), np.eye(1))[0,0]
 
+    def calc_flow(self):
+        pass
+        
     def temp_control(self, secs):
         # Implement MRAC temperature control method here
         return self.controls[0]
@@ -206,8 +210,8 @@ class IndependentMRAC(Controller):
     def update_model(self):
         # Implement MRAC model update method here
         err = self.state - self.targets
-        self.kx += -self.gamma * err * self.state * DELTA
-        self.kr += -self.gamma * err * self.r * DELTA
+        self.kx += -self.gamma * err * self.state * PERIOD
+        self.kr += -self.gamma * err * self.r * PERIOD
         self.controls = self.kx * self.state + self.kr * self.r
 
     def compute_reference(self):
@@ -246,7 +250,7 @@ class IndependentMRAC(Controller):
         while True:
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())[:2]
-                self.state = self.filter.apply(dt=DELTA, value=obs)
+                self.state = self.filter.apply(dt=PERIOD, value=obs)
 
             # Compute a reference signal if necessary
             if self.rt is None:
@@ -261,11 +265,10 @@ class IndependentMRAC(Controller):
             if self.brew_event.is_set():
                 action[1] = self.flow_control((next-start).total_seconds())
             else:
-                self.targets[2] = 0
                 start = next
 
             self.act_pipe.send(action)
-            self.targ_pipe.send(self.targets)
+            self.targ_pipe.send(list(self.targets) + [0])
             next += DELTA
             pause.until(next)
 
