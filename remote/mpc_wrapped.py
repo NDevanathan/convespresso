@@ -1,6 +1,6 @@
-from .serial_control import Controller
-from .mpc import TPTrackerMPC
-from .mhe import MHE
+from lib.serial_control import Controller
+from lib.mpc import TPTrackerMPC
+from lib.mhe import MHE
 
 
 class TPTracker(Controller):
