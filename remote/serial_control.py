@@ -239,6 +239,7 @@ class IndependentMRAC(Controller):
         self.filter = filter
         self.targets = np.array(self.targets[:2])
         self.state = np.zeros(2)
+        self.controls = np.zeros(2)
         self.r = np.array([], dtype=np.dtype('float64'))
         self.rt = None
 
@@ -260,9 +261,10 @@ class IndependentMRAC(Controller):
     def update_model(self):
         # Implement MRAC model update method here
         err = self.state - self.targets
-        self.kx += -self.gamma * err * self.state * PERIOD / 1000000
-        self.kr += -self.gamma * err * self.r * PERIOD
-        self.controls = self.kx * self.state + self.kr * self.r
+        self.kx += -self.gamma * err * self.state * PERIOD * (1-(self.controls-0.5)**2)
+        self.kr += -self.gamma * err * self.rt * PERIOD * (1-(self.controls-0.5)**2)
+        self.controls = np.clip(self.kx * self.state + self.kr * self.rt, 0, 1)
+        print(self.controls)
 
     def compute_reference(self):
         if len(self.r) == 0:
@@ -333,7 +335,7 @@ if __name__ == '__main__':
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
     filter = LowPassFilter(0.8)
     cont_proc = IndependentMRAC(
-        Am, Bm, cm, filter, np.ones(2), np.ones(2), 2., act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+        Am, Bm, cm, filter, 0.01*np.ones(2), np.ones(2), 2e-6, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
     )
     comm_proc.start()
     cont_proc.start()
