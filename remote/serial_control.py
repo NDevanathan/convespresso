@@ -198,7 +198,7 @@ class IndependentMRAC(Controller):
 
     def calc_flow(self):
         pass
-        
+
     def temp_control(self, secs):
         # Implement MRAC temperature control method here
         return self.controls[0]
@@ -274,9 +274,9 @@ class IndependentMRAC(Controller):
 
 
 if __name__ == '__main__':
-    Am = np.array([5.21002047, 5.19603903])
-    Bm = np.array([2.52135214, 1.07092862])
-    cm = np.array([-0.22554064, 0.])
+    Am = np.array([-0.00567817, -0.07032745])
+    Bm = np.array([1.78018046, 0.95982973])
+    cm = np.array([0.17299905, 0.])
 
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
