@@ -28,6 +28,7 @@ class MHE:
         self.x0 = x0.copy()
 
     def push(self, y, u):
+        """ Update history """
         self.y_history.append(y)
         self.u_history.append(u)
         if len(self.y_history) > self.horizon:
