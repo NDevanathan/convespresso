@@ -51,8 +51,6 @@ class CommProcess(Process):
             else:
                 brew_time = (next-start).total_seconds()
 
-            print(self.action[0])
-            print("\n")
             self.comms.take_action(self.action[0],self.action[1])
             if i % PERIODS_PER_FRAME == 0: self.comms.refresh_display(
                 'ESPRESSO',
@@ -94,9 +92,6 @@ class Controller(Process, metaclass=ABCMeta):
         self.targets = [94.5, 9., 0.]
         self.flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
 
-        self.last_error = None
-        self.last_integral = 0.
-
     @abstractmethod
     def calc_flow(self):
         pass
@@ -113,8 +108,51 @@ class Controller(Process, metaclass=ABCMeta):
     def run(self):
         pass
 
+class OnOff(Controller):
+    def calc_flow(self):
+        pass
+
+    def temp_control(self, secs):
+        if self.state[0] < self.targets[0]:
+            return 1.
+        else:
+            return 0.
+
+    def flow_control(self, secs):
+        if self.state[1] < self.targets[1]:
+            return 1.
+        else:
+            return 0.
+
+    def run(self):
+        start = dt.datetime.now()
+        next = start
+        while True:
+            while not self.state_queue.empty():
+                self.state = self.state_queue.get()
+
+            action = [0., 0.]
+            action[0] = self.temp_control((next-start).total_seconds())
+
+            if self.brew_event.is_set():
+                action[1] = self.flow_control((next-start).total_seconds())
+            else:
+                self.targets[2] = 0
+                start = next
+
+            self.act_pipe.send(action)
+            self.targ_pipe.send(self.targets)
+            next += DELTA
+            pause.until(next)
 
 class PID(Controller):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.heat_last_error = None
+        self.heat_last_integral = 0.
+        self.pump_last_error = None
+        self.pump_last_integral = 0.
+        
     def calc_flow(self):
         full_flow = sum([self.flow_coefs[i] * self.state[1]**i for i in range(len(self.flow_coefs))]) / 60
         return full_flow * self.state[3]
@@ -131,27 +169,35 @@ class PID(Controller):
 
         proportional = error
         derivative = 0.
-        integral = self.last_integral
+        integral = self.heat_last_integral
 
-        if not (self.last_error is None):
-            derivative = (error - self.last_error) / PERIOD
-            integral += self.last_error * PERIOD
+        if not (self.heat_last_error is None):
+            derivative = (error - self.heat_last_error) / PERIOD
+            integral += self.heat_last_error * PERIOD
 
-        self.last_error = error
+        self.heat_last_error = error
         return alpha*proportional + beta*integral + gamma*derivative
 
     def flow_control(self, secs):
-        if secs <= PRE_INF_DUR:
-            return PRE_INF_LEVEL
-        elif secs <= PRE_INF_DUR + RAMP_DUR:
-            return RAMP_LEVEL
+        target = self.targets[1]
+        curr_temp = self.state[1]
 
-        flow = self.calc_flow()
-        pump_level = (FLOW_TARG * self.state[3] / flow) ** (0.5)
+        alpha = 1/15
+        beta = 1/5000
+        gamma = 1/20
 
-        if pump_level > RAMP_LEVEL: pump_level = RAMP_LEVEL
-        self.targets[2] += flow * PERIOD
-        return pump_level
+        error = target - curr_temp
+
+        proportional = error
+        derivative = 0.
+        integral = self.pump_last_integral
+
+        if not (self.pump_last_error is None):
+            derivative = (error - self.pump_last_error) / PERIOD
+            integral += self.pump_last_error * PERIOD
+
+        self.pump_last_error = error
+        return alpha*proportional + beta*integral + gamma*derivative
 
     def run(self):
         start = dt.datetime.now()
@@ -198,6 +244,8 @@ class IndependentMRAC(Controller):
 
         P = solve_discrete_are(1 + PERIOD * Am[0], PERIOD * Bm[0], np.eye(1), np.eye(1))[0,0]
         self.Ktemp = PERIOD * Bm[0] * P
+        print(self.Ktemp)
+
 
     def calc_flow(self):
         pass
@@ -215,6 +263,9 @@ class IndependentMRAC(Controller):
         err = self.state - self.targets
         self.kx += -self.gamma * err * self.state * PERIOD
         self.kr += -self.gamma * err * self.r * PERIOD
+        print(self.kr)
+        print(self.state)
+        print('\n')
         self.controls = self.kx * self.state + self.kr * self.r
 
     def compute_reference(self):
@@ -247,6 +298,7 @@ class IndependentMRAC(Controller):
             self.rt = np.array([], dtype=np.dtype('float64'))
             self.r = -self.Ktemp * self.state + self.cm
             self.r[1] = 0.
+            print(self.r)
 
     def run(self):
         start = dt.datetime.now()
@@ -275,7 +327,6 @@ class IndependentMRAC(Controller):
             self.targ_pipe.send(list(self.targets) + [0])
             next += DELTA
             pause.until(next)
-
 
 if __name__ == '__main__':
     Am = np.array([-0.00567817, -0.07032745])
