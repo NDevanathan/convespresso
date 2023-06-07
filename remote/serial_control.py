@@ -262,13 +262,10 @@ class IndependentMRAC(Controller):
         err = self.state - self.targets
         self.kx += -self.gamma * err * self.state * PERIOD / 1000000
         self.kr += -self.gamma * err * self.r * PERIOD
-        print(self.kr)
-        print(self.state)
-        print('\n')
         self.controls = self.kx * self.state + self.kr * self.r
 
     def compute_reference(self):
-        if self.brew_event.is_set() and len(self.r) == 0:
+        if len(self.r) == 0:
             num_samples = 60 * FREQ
             r_cvx = cp.Variable((num_samples - 1, 2))
             traj = cp.Variable((num_samples, 2))
@@ -291,13 +288,10 @@ class IndependentMRAC(Controller):
 
             self.r = r_cvx.value
             self.rt, self.r = self.r[0], self.r[1:]
-        elif self.brew_event.is_set():
+        self.rt, self.r = self.r[0], self.r[1:]
+        if not self.brew_event.is_set():
             self.rt, self.r = self.r[0], self.r[1:]
-        else:
-            self.rt = np.array([], dtype=np.dtype('float64'))
-            self.r = self.Ktemp * self.state + self.cm
             self.r[1] = 0.
-            print(self.r)
 
     def run(self):
         start = dt.datetime.now()
