@@ -429,6 +429,7 @@ class MPC(Controller):
         target_T,
         C,
         mhe_horizon,
+        filter,
         *args,
         H=10,
         **kwargs
@@ -442,6 +443,7 @@ class MPC(Controller):
         self.mhe_horizon = mhe_horizon
         self.n, self.m = self.B.shape
         self.controller = TempTrackerMPC(A, B, c, target_T, H=H)
+        self.filter = filter
 
     def run(self):
         start = dt.datetime.now()
@@ -503,6 +505,7 @@ if __name__ == "__main__":
         target_T,
         C,
         mhe_horizon,
+        filter,
     )
     # cont_proc = IndependentMIAC(
     #     filter, 7*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
