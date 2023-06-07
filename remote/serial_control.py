@@ -8,10 +8,10 @@ import pause
 
 from lib.serial_courier import SerialCourier
 
-FREQ   = 60 #Hz
+FREQ   = 20 #Hz
 PERIOD = 1/FREQ
 DELTA = dt.timedelta(seconds=PERIOD) #seconds
-PERIODS_PER_FRAME = 15
+PERIODS_PER_FRAME = 10
 
 PRE_INF_DUR = 10
 RAMP_DUR = 5
@@ -221,8 +221,9 @@ class PID(Controller):
 
 
 class IndependentMIAC(Controller):
-    def __init__(self, filter, P0, A0, B0, c0, *args, **kwargs):
+    def __init__(self, filter, P0, A0, B0, c0, num_states=1, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        assert P0.shape[0] == num_states * 8 + 2
         self.P = P0
         self.ahat = np.hstack((A0, B0, c0.reshape((-1, 1)))).flatten()
         self.Ahat = A0
@@ -232,7 +233,7 @@ class IndependentMIAC(Controller):
         self.filter = filter
         self.targets = np.array(self.targets)
         self.state = None
-        self.last_state = None
+        self.last_state = np.zeros((4, 0))
 
     def calc_flow(self):
         pass
@@ -246,18 +247,16 @@ class IndependentMIAC(Controller):
         pass
 
     def update_model(self):
-        if not (self.last_state is None):
-            phi = np.kron(np.concatenate((self.last_state, [1])), np.eye(2))
-            deriv = FREQ * (self.state[:2] - self.last_state[:2])
+        if self.last_state.shape[1] == num_states:
+            phi = np.kron(np.concatenate((self.last_state.flatten(), [1])), np.eye(2))
+            deriv = FREQ * (self.state[:2] - self.last_state[:2, -1])
             K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
-            print(K)
             self.ahat += K @ (deriv - phi @ self.ahat)
             self.P = (np.eye(10) - K @ phi) @ self.P
-        stacked = self.ahat.reshape((2, 5))
-        self.Ahat = stacked[:, :2]
-        self.Bhat = stacked[:, 2:4]
-        self.chat = stacked[:, 4]
-        print('\n')
+        stacked = self.ahat.reshape((2, num_states * 4 + 1))
+        self.Ahat = stacked[:, :num_states+1]
+        self.Bhat = stacked[:, num_states+1:2*num_states+1]
+        self.chat = stacked[:, 2*num_states+1]
 
     def compute_action(self):
         if self.state is None:
@@ -290,6 +289,7 @@ class IndependentMIAC(Controller):
         prob.solve()
 
         print(r_cvx.value[0])
+        print(traj.value)
         print('\n' +'*'*20)
         return np.clip(r_cvx.value[0], 0, 1)
 
@@ -300,6 +300,7 @@ class IndependentMIAC(Controller):
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
+                print(obs)
                 self.last_state, self.state = self.state, obs
 
             # Update the model dynamics
@@ -315,6 +316,7 @@ class IndependentMIAC(Controller):
             self.targ_pipe.send(list(self.targets))
             next += DELTA
             pause.until(next)
+            print(dt.datetime.now())
 
 
 class IndependentMRAC(Controller):
@@ -416,7 +418,7 @@ class IndependentMRAC(Controller):
             pause.until(next)
 
 if __name__ == '__main__':
-    A0 = np.diag([-0.00567817, -0.07032745])
+    A0 = np.diag([-1, -1])
     B0 = np.diag([1.78018046, 0.95982973])
     c0 = np.array([0.17299905, 0.])
 
@@ -427,7 +429,7 @@ if __name__ == '__main__':
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
     filter = LowPassFilter(0.8)
     cont_proc = IndependentMIAC(
-        filter, np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+        filter, 10*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
     )
     comm_proc.start()
     cont_proc.start()
