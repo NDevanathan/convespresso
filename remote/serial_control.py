@@ -2,6 +2,7 @@ import datetime as dt
 from abc import ABCMeta, abstractmethod
 from multiprocessing import Event, Pipe, Process, Queue
 
+import cvxpy as cp
 import numpy as np
 import pause
 
@@ -28,7 +29,7 @@ class CommProcess(Process):
         start = dt.datetime.now()
         next = start
         brew_time = 0
-        
+
         while True:
             self.state_queue.put(self.comms.get_state())
             while self.targ_pipe.poll():
@@ -51,7 +52,7 @@ class CommProcess(Process):
                 self.targets[2],
                 brew_time
             )
-            
+
             i += 1
             next += DELTA
             pause.until(next)
@@ -61,16 +62,12 @@ class LowPassFilter:
     def __init__(self, alpha_per_second):
         self.alpha_per_second = alpha_per_second
         self.state = None
-        self.last_time = None
 
-    def apply(self, time, value):
+    def apply(self, dt, value):
         if self.state is None:
             self.state = value
-            self.last_time = time
             return value
         else:
-            dt = time - self.last_time
-            self.last_time = time
             alpha = 1 - np.exp(-self.alpha_per_second * dt)
             self.state = alpha * value + (1 - alpha) * self.state
             return self.state
@@ -121,6 +118,7 @@ class Controller(Process, metaclass=ABCMeta):
     def run(self):
         pass
 
+
 class PID(Controller):
     def calc_flow(self):
         full_flow = sum([self.flow_coefs[i] * self.state[1]**i for i in range(len(self.flow_coefs))]) / 60
@@ -152,7 +150,7 @@ class PID(Controller):
             return 1/4
         elif secs <= 15:
             return 1/2
-        
+
         flow = self.calc_flow()
         pump_level = (1.5 * self.state[3] / flow) ** (0.5)
 
@@ -182,13 +180,145 @@ class PID(Controller):
             pause.until(next)
 
 
+class IndependentMRAC(Controller):
+    def __init__(self, Am, Bm, cm, filter, kx, kr, gamma, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # We assume Am, Bm, cm, kx, kr, gamma are numpy arrays.
+        # Each contains a hyperparameter for temperature first and
+        # for pressure second.
+        self.Am = Am
+        self.Bm = Bm
+        self.cm = cm
+
+        self.kx = kx
+        self.kr = kr
+        self.gamma = gamma
+
+        self.filter = filter
+        self.r = None
+
+    def temp_control(self, secs):
+        # Implement MRAC temperature control method here
+        return self.controls[0]
+
+    def flow_control(self, secs):
+        # Implement MRAC flow control method here
+        return self.controls[1]
+
+    def update_model(self):
+        # Implement MRAC model update method here
+        err = self.state - self.targets[:2]
+        self.kx += -self.gamma * err * self.state * DELTA
+        self.kr += -self.gamma * err * self.r * DELTA
+        self.controls = self.kx * self.state + self.kr * self.r
+
+    def compute_reference(self):
+        r_cvx = cp.Variable()
+
+    def run(self):
+        start = dt.datetime.now()
+        next = start
+        while True:
+            while not self.state_queue.empty():
+                obs = self.state_queue.get()
+                self.state = self.filter.apply(dt=DELTA, value=obs)
+
+            # Compute a reference signal if necessary
+            if self.r is None:
+                self.compute_reference()
+
+            # Update MRAC model parameters if necessary
+            self.update_model()
+
+            action = [0., 0.]
+            action[0] = self.temp_control((next-start).total_seconds())
+
+            if self.brew_event.is_set():
+                action[1] = self.flow_control((next-start).total_seconds())
+            else:
+                self.targets[2] = 0
+                start = next
+
+            self.act_pipe.send(action)
+            self.targ_pipe.send(self.targets)
+            next += DELTA
+            pause.until(next)
+
+
+class IndependentMRAC(Controller):
+    def __init__(self, Am, Bm, cm, filter, kx, kr, gamma, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # We assume Am, Bm, cm, kx, kr, gamma are numpy arrays.
+        # Each contains a hyperparameter for temperature first and
+        # for pressure second.
+        self.Am = Am
+        self.Bm = Bm
+        self.cm = cm
+
+        self.kx = kx
+        self.kr = kr
+        self.gamma = gamma
+
+        self.filter = filter
+        self.r = None
+
+    def temp_control(self, secs):
+        # Implement MRAC temperature control method here
+        return self.controls[0]
+
+    def flow_control(self, secs):
+        # Implement MRAC flow control method here
+        return self.controls[1]
+
+    def update_model(self):
+        # Implement MRAC model update method here
+        err = self.state - self.targets[:2]
+        self.kx += -self.gamma * err * self.state * DELTA
+        self.kr += -self.gamma * err * self.r * DELTA
+        self.controls = self.kx * self.state + self.kr * self.r
+
+    def compute_reference(self):
+        r_cvx = cp.Variable()
+
+    def run(self):
+        start = dt.datetime.now()
+        next = start
+        while True:
+            while not self.state_queue.empty():
+                obs = self.state_queue.get()
+                self.state = self.filter.apply(dt=DELTA, value=obs)
+
+            # Compute a reference signal if necessary
+            if self.r is None:
+                self.compute_reference()
+
+            # Update MRAC model parameters if necessary
+            self.update_model()
+
+            action = [0., 0.]
+            action[0] = self.temp_control(next - start)
+
+            if self.brew_event.is_set():
+                action[1] = self.flow_control(next - start)
+            else:
+                self.targets[2] = 0
+                start = next
+
+            self.act_pipe.send(action)
+            self.targ_pipe.send(self.targets)
+            next += DELTA
+            pause.until(next)
+
+
 if __name__ == '__main__':
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
     state_queue = Queue()
     brew_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
-    cont_proc = PID(act_pipe_cont, targ_pipe_cont, state_queue, brew_event)
+    cont_proc = IndependentMRAC(act_pipe_cont, targ_pipe_cont, state_queue, brew_event)
     comm_proc.start()
     cont_proc.start()
     input("Hit ENTER to start brewing.")
