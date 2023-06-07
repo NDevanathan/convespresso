@@ -52,6 +52,7 @@ class CommProcess(Process):
                 brew_time = (next-start).total_seconds()
 
             print(self.action[0])
+            print("\n")
             self.comms.take_action(self.action[0],self.action[1])
             if i % PERIODS_PER_FRAME == 0: self.comms.refresh_display(
                 'ESPRESSO',
