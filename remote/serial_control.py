@@ -4,7 +4,6 @@ from multiprocessing import Event, Pipe, Process, Queue
 
 import cvxpy as cp
 import numpy as np
-from scipy.linalg import solve_discrete_are
 import pause
 
 from lib.serial_courier import SerialCourier
@@ -221,6 +220,85 @@ class PID(Controller):
             pause.until(next)
 
 
+class IndependentMIAC(Controller):
+    def __init__(self, filter, P0, A0, B0, c0, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.P = P0
+        self.ahat = np.hstack((A0, B0, c0.reshape((-1, 1)))).flatten()
+        self.Ahat = A0
+        self.Bhat = B0
+        self.chat = c0
+
+        self.filter = filter
+        self.state = None
+        self.last_state = None
+
+    def calc_flow(self):
+        pass
+
+    def update_model(self):
+        if not (self.last_state is None):
+            phi = np.kron(np.concatenate((self.last_state, [1])), np.eye(5))
+            deriv = FREQ * (self.state - self.last_state)
+            K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
+            self.ahat += K @ (deriv - phi @ self.ahat)
+            self.P = (np.eye(10) - K @ phi) @ self.P
+        stacked = self.ahat.reshape((2, 5))
+        self.Ahat = stacked[:, :2]
+        self.Bhat = stacked[:, 2:4]
+        self.chat = stacked[:, 4]
+
+    def compute_action(self):
+        num_samples = 10 * FREQ
+        r_cvx = cp.Variable((num_samples - 1, 2))
+        traj = cp.Variable((num_samples, 2))
+
+        traj_diff = traj - self.targets[None, :2]
+        if not self.brew_event.is_set():
+            traj_err = traj_diff @ np.diag([1, 0])
+        else:
+            traj_err =  traj_diff @ np.diag([1, 1])
+        obj = cp.sum_squares(traj_err) + cp.sum_squares(r_cvx)
+
+        endo = traj[:-1] @ self.Ahat.T + self.chat[None]
+        exo = r_cvx @ self.Bhat.T
+        constraints = [
+            traj[1:] == traj[:-1] + PERIOD * (endo + exo),
+            0 <= r_cvx,
+            r_cvx <= 1,
+            traj[0] == self.state[:2]
+        ]
+        if not self.brew_event.is_set():
+            constraints += [
+                r_cvx[:, 1] == 0
+            ]
+
+        prob = cp.Problem(cp.Minimize(obj), constraints)
+        prob.solve()
+
+        return np.clip(r_cvx.value[0], 0, 1)
+
+    def run(self):
+        # start = dt.datetime.now()
+        # next = start
+        while True:
+            while not self.state_queue.empty():
+                obs = np.array(self.state_queue.get())
+                obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
+                self.last_state, self.state = self.state, obs
+
+            # Update the model dynamics
+            self.update_model()
+
+            # Compute an optimal action
+            action = list(self.compute_action())
+
+            self.act_pipe.send(action)
+            self.targ_pipe.send(self.targets)
+            next += DELTA
+            pause.until(next)
+
+
 class IndependentMRAC(Controller):
     def __init__(self, Am, Bm, cm, filter, kx, kr, gamma, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -241,10 +319,6 @@ class IndependentMRAC(Controller):
         self.state = np.zeros(2)
         self.r = np.array([], dtype=np.dtype('float64'))
         self.rt = None
-
-        P = solve_discrete_are(1 + PERIOD * Am[0], PERIOD * Bm[0], np.eye(1), np.eye(1))[0,0]
-        # self.Ktemp = -PERIOD * Bm[0] * P
-        self.Ktemp = -PERIOD * Bm[0] / (1 + (PERIOD * Bm[0])**2 * P) * (1 + PERIOD * Am[0])
 
     def calc_flow(self):
         pass
@@ -322,9 +396,9 @@ class IndependentMRAC(Controller):
             pause.until(next)
 
 if __name__ == '__main__':
-    Am = np.array([-0.00567817, -0.07032745])
-    Bm = np.array([1.78018046, 0.95982973])
-    cm = np.array([0.17299905, 0.])
+    A0 = np.array([-0.00567817, -0.07032745])
+    B0 = np.array([1.78018046, 0.95982973])
+    c0 = np.array([0.17299905, 0.])
 
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
@@ -332,8 +406,8 @@ if __name__ == '__main__':
     brew_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
     filter = LowPassFilter(0.8)
-    cont_proc = IndependentMRAC(
-        Am, Bm, cm, filter, np.ones(2), np.ones(2), 2., act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+    cont_proc = IndependentMIAC(
+        filter, np.ones(5), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
     )
     comm_proc.start()
     cont_proc.start()
