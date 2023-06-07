@@ -197,7 +197,8 @@ class IndependentMRAC(Controller):
         self.rt = None
 
         P = solve_discrete_are(1 + PERIOD * Am[0], PERIOD * Bm[0], np.eye(1), np.eye(1))[0,0]
-        self.Ktemp = PERIOD * Bm[0] * P
+        # self.Ktemp = -PERIOD * Bm[0] * P
+        self.Ktemp = -PERIOD * Bm[0] / (1 + (PERIOD * Bm[0])**2 * P) * (1 + PERIOD * Am[0])
 
     def calc_flow(self):
         pass
@@ -213,7 +214,7 @@ class IndependentMRAC(Controller):
     def update_model(self):
         # Implement MRAC model update method here
         err = self.state - self.targets
-        self.kx += -self.gamma * err * self.state * PERIOD
+        self.kx += -self.gamma * err * self.state * PERIOD / 10000
         self.kr += -self.gamma * err * self.r * PERIOD
         self.controls = self.kx * self.state + self.kr * self.r
 
@@ -245,7 +246,7 @@ class IndependentMRAC(Controller):
             self.rt, self.r = self.r[0], self.r[1:]
         else:
             self.rt = np.array([], dtype=np.dtype('float64'))
-            self.r = -self.Ktemp * self.state + self.cm
+            self.r = self.Ktemp * self.state + self.cm
             self.r[1] = 0.
 
     def run(self):
