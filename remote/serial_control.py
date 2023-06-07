@@ -50,7 +50,7 @@ class CommProcess(Process):
                 self.comms.close_valve()
             else:
                 brew_time = (next-start).total_seconds()
-            
+
             print(self.action[0])
             self.comms.take_action(self.action[0],self.action[1])
             if i % PERIODS_PER_FRAME == 0: self.comms.refresh_display(
@@ -195,7 +195,7 @@ class IndependentMRAC(Controller):
         self.r = np.array([], dtype=np.dtype('float64'))
         self.rt = None
 
-        self.Ktemp = solve_discrete_are(Am[0], Bm[0], np.eye(1), np.eye(1))[0,0]
+        self.Ktemp = solve_discrete_are(1 + PERIOD * Am[0], PERIOD * Bm[0], np.eye(1), np.eye(1))[0,0]
 
     def calc_flow(self):
         pass
