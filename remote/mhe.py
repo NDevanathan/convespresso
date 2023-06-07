@@ -27,29 +27,32 @@ class MHE:
         # previous horizon-1 state estimate
         self.x0 = x0.copy()
 
-    def push(self, y, u):
-        """ Update history """
-        self.y_history.append(y)
+    def update(self, u):
         self.u_history.append(u)
-        if len(self.y_history) > self.horizon:
-            self.y_history.pop(0)
         if len(self.u_history) > self.horizon:
             self.u_history.pop(0)
+
+    def observe(self, y):
+        """ Update history """
+        self.y_history.append(y)
+        if len(self.y_history) > self.horizon:
+            self.y_history.pop(0)
         return len(self.y_history)
 
-    def estimate(self, y, u):
+    def __call__(self, y):
         """State estimation using new observation y"""
-        N = self.push(y, u)
+        N = self.observe(y)
 
-        x = cp.Variable((N + 1, self.n))
+        x = cp.Variable((N, self.n))
         w = cp.Variable((N, self.n))
         v = cp.Variable((N, self.p))
 
         cons = []
         for i in range(N):
-            cons.append(
-                x[i + 1, :] == self.A @ x[i, :] + self.B @ self.u_history[i] + w[i, :]
-            )
+            if i < N - 1:
+                cons.append(
+                    x[i + 1, :] == self.A @ x[i, :] + self.B @ self.u_history[i] + w[i, :]
+                )
             cons.append(self.y_history[i] == self.C @ x[i, :] + v[i, :])
 
         # solve mhe problem
@@ -61,14 +64,14 @@ class MHE:
         self.x0 = x.value[1, :] if N == self.u_history else x.value[0, :]
 
         # return state estimate
-        return x.value[-2, :]
+        return x.value[-1, :]
 
 
 if __name__ == "__main__":
     # test
     import numpy as np
 
-    n, m, p = 5, 3, 2
+    n, m, p = 5, 3, 3
     T = 50
     H = 10
 
@@ -96,7 +99,8 @@ if __name__ == "__main__":
                 A @ x_true[t, :] + B @ u[t, :] + c + 0.25 * np.random.randn(n)
             )
 
-        x_est[t, :] = estimator.estimate(y, u[t, :])
+        x_est[t, :] = estimator(y)
+        estimator.update(u[t, :])
 
     import matplotlib.pyplot as plt
 

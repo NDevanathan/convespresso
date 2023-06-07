@@ -1,4 +1,5 @@
 import cvxpy as cp
+from mhe import MHE
 
 
 class TPTrackerMPC:
@@ -98,12 +99,17 @@ if __name__ == "__main__":
     target_p = np.array([0.1 * i for i in range(N)])
     target_T = np.array([34 + 0.5 * i for i in range(N)])
 
-    controller = PTMPC(
+    controller = TPTrackerMPC(
         A, B, c, c1, c2, target_p, target_T, H=20, enable_input_constraints=False
     )
 
     p0 = 1.0
     z0 = np.ones(n) * 34.0
+
+    # state estimation
+    C = np.zeros((1, n))
+    C[:,0] = 1.
+    mhe = MHE(A, B, c, C, z0, 20)
 
     p = np.zeros(N)
     z = np.zeros((N, n))
@@ -112,7 +118,9 @@ if __name__ == "__main__":
     p[0] = p0
     z[0] = z0
     for i in range(N - 1):
-        u1[i], u2[i] = controller(i, p[i], z[i])
+        u1[i], u2[i] = controller(i, p[i], mhe(z[i][0]))
+        mhe.update(u1[i])
+
         z[i + 1] = A @ z[i] + B @ u1[i] + c
         p[i + 1] = c1 * p[i] + c2 * u2[i]
 
