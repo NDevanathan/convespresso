@@ -4,6 +4,7 @@ from multiprocessing import Event, Pipe, Process, Queue
 
 import cvxpy as cp
 import numpy as np
+from scipy.linalg import solve_discrete_are
 import pause
 
 from lib.serial_courier import SerialCourier
@@ -196,7 +197,11 @@ class IndependentMRAC(Controller):
         self.gamma = gamma
 
         self.filter = filter
-        self.r = None
+        self.targets = np.array(self.targets[:2])
+        self.r = np.array([], dtype=np.dtype('float64'))
+        self.rt = None
+
+        self.Ktemp = solve_discrete_are(Am[0], Bm[0], np.eye(1), np.eye(1))[0,0]
 
     def temp_control(self, secs):
         # Implement MRAC temperature control method here
@@ -208,24 +213,51 @@ class IndependentMRAC(Controller):
 
     def update_model(self):
         # Implement MRAC model update method here
-        err = self.state - self.targets[:2]
+        err = self.state - self.targets
         self.kx += -self.gamma * err * self.state * DELTA
         self.kr += -self.gamma * err * self.r * DELTA
         self.controls = self.kx * self.state + self.kr * self.r
 
     def compute_reference(self):
-        r_cvx = cp.Variable()
+        if self.brew_event.is_set() and len(self.r) == 0:
+            num_samples = 60 * FREQ
+            r_cvx = cp.Variable((num_samples - 1, 2))
+            traj = cp.Variable((num_samples, 2))
+
+            traj_diff = traj - self.targets[None]
+            traj_err =  traj_diff @ np.diag([1, 1])
+            obj = cp.sum_squares(traj_err) + cp.sum_squares(r_cvx)
+
+            endo = traj[:-1] @ np.diag(self.Am) + self.cm[None]
+            exo = r_cvx @ np.diag(self.Bm)
+            constraints = [
+                traj[1:] == endo + exo,
+                0 <= r_cvx,
+                r_cvx <= 1,
+                traj[0] == self.state
+            ]
+
+            prob = cp.Problem(cp.Minimize(obj), constraints)
+            prob.solve()
+
+            self.r = r_cvx.value
+            self.rt, self.r = self.r[0], self.r[1:]
+        elif self.brew_event.is_set():
+            self.rt, self.r = self.r[0], self.r[1:]
+        else:
+            self.r = -self.Ktemp * self.state + self.cm
+            self.r[1] = 0.
 
     def run(self):
         start = dt.datetime.now()
         next = start
         while True:
             while not self.state_queue.empty():
-                obs = self.state_queue.get()
+                obs = np.array(self.state_queue.get())[:2]
                 self.state = self.filter.apply(dt=DELTA, value=obs)
 
             # Compute a reference signal if necessary
-            if self.r is None:
+            if self.rt is None:
                 self.compute_reference()
 
             # Update MRAC model parameters if necessary
@@ -236,72 +268,6 @@ class IndependentMRAC(Controller):
 
             if self.brew_event.is_set():
                 action[1] = self.flow_control((next-start).total_seconds())
-            else:
-                self.targets[2] = 0
-                start = next
-
-            self.act_pipe.send(action)
-            self.targ_pipe.send(self.targets)
-            next += DELTA
-            pause.until(next)
-
-
-class IndependentMRAC(Controller):
-    def __init__(self, Am, Bm, cm, filter, kx, kr, gamma, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # We assume Am, Bm, cm, kx, kr, gamma are numpy arrays.
-        # Each contains a hyperparameter for temperature first and
-        # for pressure second.
-        self.Am = Am
-        self.Bm = Bm
-        self.cm = cm
-
-        self.kx = kx
-        self.kr = kr
-        self.gamma = gamma
-
-        self.filter = filter
-        self.r = None
-
-    def temp_control(self, secs):
-        # Implement MRAC temperature control method here
-        return self.controls[0]
-
-    def flow_control(self, secs):
-        # Implement MRAC flow control method here
-        return self.controls[1]
-
-    def update_model(self):
-        # Implement MRAC model update method here
-        err = self.state - self.targets[:2]
-        self.kx += -self.gamma * err * self.state * DELTA
-        self.kr += -self.gamma * err * self.r * DELTA
-        self.controls = self.kx * self.state + self.kr * self.r
-
-    def compute_reference(self):
-        r_cvx = cp.Variable()
-
-    def run(self):
-        start = dt.datetime.now()
-        next = start
-        while True:
-            while not self.state_queue.empty():
-                obs = self.state_queue.get()
-                self.state = self.filter.apply(dt=DELTA, value=obs)
-
-            # Compute a reference signal if necessary
-            if self.r is None:
-                self.compute_reference()
-
-            # Update MRAC model parameters if necessary
-            self.update_model()
-
-            action = [0., 0.]
-            action[0] = self.temp_control(next - start)
-
-            if self.brew_event.is_set():
-                action[1] = self.flow_control(next - start)
             else:
                 self.targets[2] = 0
                 start = next
