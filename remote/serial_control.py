@@ -230,25 +230,38 @@ class IndependentMIAC(Controller):
         self.chat = c0
 
         self.filter = filter
+        self.targets = np.array(self.targets)
         self.state = None
         self.last_state = None
 
     def calc_flow(self):
         pass
+        
+    def temp_control(self, secs):
+        # Implement MRAC temperature control method here
+        pass
+
+    def flow_control(self, secs):
+        # Implement MRAC flow control method here
+        pass
 
     def update_model(self):
         if not (self.last_state is None):
-            phi = np.kron(np.concatenate((self.last_state, [1])), np.eye(5))
-            deriv = FREQ * (self.state - self.last_state)
+            phi = np.kron(np.concatenate((self.last_state, [1])), np.eye(2))
+            deriv = FREQ * (self.state[:2] - self.last_state[:2])
             K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
+            print(K)
             self.ahat += K @ (deriv - phi @ self.ahat)
             self.P = (np.eye(10) - K @ phi) @ self.P
         stacked = self.ahat.reshape((2, 5))
         self.Ahat = stacked[:, :2]
         self.Bhat = stacked[:, 2:4]
         self.chat = stacked[:, 4]
+        print('\n')
 
     def compute_action(self):
+        if self.state is None:
+            return np.zeros(2)
         num_samples = 10 * FREQ
         r_cvx = cp.Variable((num_samples - 1, 2))
         traj = cp.Variable((num_samples, 2))
@@ -276,11 +289,13 @@ class IndependentMIAC(Controller):
         prob = cp.Problem(cp.Minimize(obj), constraints)
         prob.solve()
 
+        print(r_cvx.value[0])
+        print('\n' +'*'*20)
         return np.clip(r_cvx.value[0], 0, 1)
 
     def run(self):
-        # start = dt.datetime.now()
-        # next = start
+        start = dt.datetime.now()
+        next = start
         while True:
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
@@ -292,9 +307,12 @@ class IndependentMIAC(Controller):
 
             # Compute an optimal action
             action = list(self.compute_action())
+            
+            if not self.brew_event.is_set():
+                start = next
 
             self.act_pipe.send(action)
-            self.targ_pipe.send(self.targets)
+            self.targ_pipe.send(list(self.targets))
             next += DELTA
             pause.until(next)
 
@@ -398,8 +416,8 @@ class IndependentMRAC(Controller):
             pause.until(next)
 
 if __name__ == '__main__':
-    A0 = np.array([-0.00567817, -0.07032745])
-    B0 = np.array([1.78018046, 0.95982973])
+    A0 = np.diag([-0.00567817, -0.07032745])
+    B0 = np.diag([1.78018046, 0.95982973])
     c0 = np.array([0.17299905, 0.])
 
     act_pipe_cont, act_pipe_comm = Pipe()
@@ -409,7 +427,7 @@ if __name__ == '__main__':
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
     filter = LowPassFilter(0.8)
     cont_proc = IndependentMIAC(
-        filter, np.ones(5), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+        filter, np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
     )
     comm_proc.start()
     cont_proc.start()
