@@ -7,6 +7,8 @@ import numpy as np
 import pause
 
 from lib.serial_courier import SerialCourier
+from lib.mhe import MHE
+from lib.mpc import TPTrackerMPC
 
 FREQ   = 20 #Hz
 PERIOD = 1/FREQ
@@ -92,25 +94,10 @@ class Controller(Process, metaclass=ABCMeta):
         self.flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
 
     @abstractmethod
-    def calc_flow(self):
-        pass
-
-    @abstractmethod
-    def temp_control(self, secs):
-        pass
-
-    @abstractmethod
-    def flow_control(self, secs):
-        pass
-
-    @abstractmethod
     def run(self):
         pass
 
 class OnOff(Controller):
-    def calc_flow(self):
-        pass
-
     def temp_control(self, secs):
         if self.state[0] < self.targets[0]:
             return 1.
@@ -151,10 +138,6 @@ class PID(Controller):
         self.heat_last_integral = 0.
         self.pump_last_error = None
         self.pump_last_integral = 0.
-
-    def calc_flow(self):
-        full_flow = sum([self.flow_coefs[i] * self.state[1]**i for i in range(len(self.flow_coefs))]) / 60
-        return full_flow * self.state[3]
 
     def temp_control(self, secs):
         target = self.targets[0]
@@ -235,17 +218,6 @@ class IndependentMIAC(Controller):
         self.state = None
         self.last_state = np.zeros((4, 0))
 
-    def calc_flow(self):
-        pass
-        
-    def temp_control(self, secs):
-        # Implement MRAC temperature control method here
-        pass
-
-    def flow_control(self, secs):
-        # Implement MRAC flow control method here
-        pass
-
     def update_model(self):
         if self.last_state.shape[1] == num_states:
             phi = np.kron(np.concatenate((self.last_state.flatten(), [1])), np.eye(2))
@@ -289,7 +261,7 @@ class IndependentMIAC(Controller):
         prob.solve()
 
         print(r_cvx.value[0])
-        print(traj.value)
+        print(traj.value[-1])
         print('\n' +'*'*20)
         return np.clip(r_cvx.value[0], 0, 1)
 
@@ -340,17 +312,6 @@ class IndependentMRAC(Controller):
         self.controls = np.zeros(2)
         self.r = np.array([], dtype=np.dtype('float64'))
         self.rt = None
-
-    def calc_flow(self):
-        pass
-
-    def temp_control(self, secs):
-        # Implement MRAC temperature control method here
-        return self.controls[0]
-
-    def flow_control(self, secs):
-        # Implement MRAC flow control method here
-        return self.controls[1]
 
     def update_model(self):
         # Implement MRAC model update method here
@@ -405,10 +366,60 @@ class IndependentMRAC(Controller):
             self.update_model()
 
             action = [0., 0.]
-            action[0] = self.temp_control((next-start).total_seconds())
+            action[0] = self.controls[0]
 
             if self.brew_event.is_set():
-                action[1] = self.flow_control((next-start).total_seconds())
+                action[1] =self.controls[1]
+            else:
+                start = next
+
+            self.act_pipe.send(action)
+            self.targ_pipe.send(list(self.targets) + [0])
+            next += DELTA
+            pause.until(next)
+            
+class MPC(Controller):
+    def __init__(self, A, B, c, c1, c2, target_p, target_T, C, x0, mhe_horizon, *args, H=None,
+            enable_input_constraints=True, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.mhe = MHE(A, B, c, C, x0, mhe_horizon)
+        self.controller = TPTrackerMPC(A, B, c, c1, c2, target_p, target_T, H=H,
+            enable_input_constraints=enable_input_constraints)
+
+    def run(self):
+        n, m = self.B.shape
+        p0 = 1.0
+        z0 = np.ones(n) * 34.0
+
+        # state estimation
+        C = np.zeros((1, n))
+        C[:,0] = 1.
+        mhe = MHE(self.A, self.B, self.c, C, z0, 20)
+
+        p = np.zeros(N)
+        z = np.zeros((N, n))
+        u1 = np.zeros((N, m))
+        u2 = np.zeros(N)
+        p[0] = p0
+        z[0] = z0
+    
+        start = dt.datetime.now()
+        next = start
+        while True:
+            while not self.state_queue.empty():
+                obs = np.array(self.state_queue.get())[:2]
+                self.state = self.filter.apply(dt=PERIOD, value=obs)
+
+            u1[i], u2[i] = controller(i, p[i], mhe(z[i][0]))
+            mhe.update(u1[i])
+
+            z[i + 1] = A @ z[i] + B @ u1[i] + c
+            p[i + 1] = c1 * p[i] + c2 * u2[i]
+
+            action[0] = u1[0]
+            if self.brew_event.is_set():
+                action[1] = u2[0]
             else:
                 start = next
 
@@ -427,9 +438,9 @@ if __name__ == '__main__':
     state_queue = Queue()
     brew_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
-    filter = LowPassFilter(0.8)
+    filter = LowPassFilter(0.5)
     cont_proc = IndependentMIAC(
-        filter, 10*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+        filter, 7*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
     )
     comm_proc.start()
     cont_proc.start()
