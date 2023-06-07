@@ -279,9 +279,9 @@ class IndependentMRAC(Controller):
 
 
 if __name__ == '__main__':
-    Am = np.array([0.99858532, 0.98670402])
-    Bm = np.array([0.34, 0.18148648])
-    cm = np.array([0.0332, 0.])
+    Am = np.array([5.21002047, 5.19603903])
+    Bm = np.array([2.52135214, 1.07092862])
+    cm = np.array([-0.22554064, 0.])
 
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
