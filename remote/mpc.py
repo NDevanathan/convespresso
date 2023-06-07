@@ -1,9 +1,7 @@
 import cvxpy as cp
 
-# from serial_control import Controller
 
-
-class PTMPC:
+class TPTrackerMPC:
     """
     Simply track provided temperature and pressure trajectories
 
