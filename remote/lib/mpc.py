@@ -1,8 +1,7 @@
 import cvxpy as cp
-from mhe import MHE
 
 
-class TPTrackerMPC:
+class TempTrackerMPC:
     """
     Simply track provided temperature and pressure trajectories
 
@@ -70,14 +69,14 @@ class TPTrackerMPC:
             )
         for i, _t in enumerate(range(t, t + H)):
             obj += cp.square(z_[i, 0] - self.target_T[_t])
-            obj += cp.square(p_[i] - self.target_p[_t])
+            # obj += cp.square(p_[i] - self.target_p[_t])
 
             # dynamics constraints
             cons.append(z_[i + 1, :] == self.A @ z_[i, :] + self.B @ u1[i, :] + self.c)
-            cons.append(p_[i + 1] == self.c1 * p_[i] + self.c2 * u2[i])
+            # cons.append(p_[i + 1] == self.c1 * p_[i] + self.c2 * u2[i])
 
         prob = cp.Problem(cp.Minimize(obj), cons)
-        prob.solve()
+        prob.solve(solver="CLARABEL")
 
         return u1.value[0, :], u2.value[0]
 
@@ -87,26 +86,34 @@ if __name__ == "__main__":
     import numpy as np
     import matplotlib.pyplot as plt
     import pickle
+    from tqdm import tqdm
 
-    A, B, c = pickle.load(open("../notebooks/temp_dynamics.p", "rb"))
+    N = 300
+    step_size = 0.5
+
+    A, B, c = pickle.load(open("../../notebooks/temp_dynamics.p", "rb"))
     n, m = B.shape
 
+    A = np.eye(n) + step_size * A
+    B *= step_size
+    c *= step_size
+
     # make something up
-    c1 = np.random.rand()
-    c2 = np.random.rand()
+    c1 = 1 + step_size * np.random.rand() / 5
+    c2 = step_size * np.random.rand() / 5
 
-    N = 100
     target_p = np.array([0.1 * i for i in range(N)])
-    target_T = np.array([34 + 0.5 * i for i in range(N)])
+    target_T = np.array([34 + 0.1 * i for i in range(N)])
 
-    controller = TPTrackerMPC(
-        A, B, c, c1, c2, target_p, target_T, H=20, enable_input_constraints=False
+    controller = TempTrackerMPC(
+        A, B, c, c1, c2, target_p, target_T, H=20, enable_input_constraints=True
     )
 
     p0 = 1.0
     z0 = np.ones(n) * 34.0
 
     # state estimation
+    from mhe import MHE
     C = np.zeros((1, n))
     C[:,0] = 1.
     mhe = MHE(A, B, c, C, z0, 20)
@@ -117,24 +124,24 @@ if __name__ == "__main__":
     u2 = np.zeros(N)
     p[0] = p0
     z[0] = z0
-    for i in range(N - 1):
+    for i in tqdm(range(N - 1)):
         u1[i], u2[i] = controller(i, p[i], mhe(z[i][0]))
         mhe.update(u1[i])
 
         z[i + 1] = A @ z[i] + B @ u1[i] + c
         p[i + 1] = c1 * p[i] + c2 * u2[i]
 
-    plt.plot(z[:, 0], "--", label="temp")
-    plt.plot(target_T, label="target temp")
+    plt.plot(step_size*np.arange(N), z[:, 0], "--", label="temp")
+    plt.plot(step_size*np.arange(N), target_T, label="target temp")
     plt.legend()
     plt.show()
 
-    plt.plot(p, "--", label="pressure")
-    plt.plot(target_p, label="target pressure")
+    plt.plot(step_size*np.arange(N), p, "--", label="pressure")
+    plt.plot(step_size*np.arange(N), target_p, label="target pressure")
     plt.legend()
     plt.show()
 
-    plt.plot(u1, label="u1")
-    plt.plot(u2, label="u2")
+    plt.plot(step_size*np.arange(N), u1, label="u1")
+    plt.plot(step_size*np.arange(N), u2, label="u2")
     plt.legend()
     plt.show()
