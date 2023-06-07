@@ -27,7 +27,10 @@ class TempTrackerMPC:
 
         # output targets
         self.target_T = target_T
-        self.horizon = len(target_T)
+        try:
+            self.horizon = len(target_T)
+        except:
+            self.horizon = np.inf
 
         # MPC lookahead
         self.H = H if H is not None else self.horizon
@@ -52,7 +55,7 @@ class TempTrackerMPC:
         if self.enable_input_constraints:
             cons.extend([u1 >= 0, u1 <= 1])
         for i, _t in enumerate(range(t, t + H)):
-            obj += cp.square(z_[i, 0] - self.target_T[_t])
+            obj += cp.square(z_[i, 0] - (self.target_T[_t] if np.isfinite(self.horizon) else self.target_T))
             cons.append(z_[i + 1, :] == self.A @ z_[i, :] + self.B @ u1[i, :] + self.c)
 
         prob = cp.Problem(cp.Minimize(obj), cons)
@@ -68,7 +71,7 @@ if __name__ == "__main__":
     import pickle
     from tqdm import tqdm
 
-    N = 300
+    N = 100
     step_size = 0.5
 
     A, B, c = pickle.load(open("../../notebooks/temp_dynamics.p", "rb"))
@@ -78,7 +81,8 @@ if __name__ == "__main__":
     B *= step_size
     c *= step_size
 
-    target_T = np.array([34 + 0.1 * i for i in range(N)])
+    # target_T = np.array([34 + 0.1 * i for i in range(N)])
+    target_T = 60
 
     controller = TempTrackerMPC(
         A, B, c, target_T, H=10, enable_input_constraints=True
@@ -102,7 +106,8 @@ if __name__ == "__main__":
         z[i + 1] = A @ z[i] + B @ u1[i] + c
 
     plt.plot(step_size*np.arange(N), z[:, 0], "--", label="temp")
-    plt.plot(step_size*np.arange(N), target_T, label="target temp")
+    # plt.plot(step_size*np.arange(N), target_T, label="target temp")
+    plt.plot(step_size*np.arange(N), target_T * np.ones(N), label="target temp")
     plt.legend()
     plt.show()
 
