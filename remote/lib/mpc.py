@@ -1,5 +1,4 @@
 import cvxpy as cp
-from mhe import MHE
 
 
 class TPTrackerMPC:
@@ -77,7 +76,7 @@ class TPTrackerMPC:
             cons.append(p_[i + 1] == self.c1 * p_[i] + self.c2 * u2[i])
 
         prob = cp.Problem(cp.Minimize(obj), cons)
-        prob.solve()
+        prob.solve(solver="CLARABEL")
 
         return u1.value[0, :], u2.value[0]
 
@@ -88,25 +87,32 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import pickle
 
-    A, B, c = pickle.load(open("../notebooks/temp_dynamics.p", "rb"))
+    N = 300
+    step_size = 0.5
+
+    A, B, c = pickle.load(open("../notebooks/temp_dynamics_4.p", "rb"))
     n, m = B.shape
 
-    # make something up
-    c1 = np.random.rand()
-    c2 = np.random.rand()
+    A = np.eye(n) + step_size * A
+    B *= step_size
+    c *= step_size
 
-    N = 100
+    # make something up
+    c1 = 1 + step_size * np.random.rand() / 5
+    c2 = step_size * np.random.rand() / 5
+
     target_p = np.array([0.1 * i for i in range(N)])
-    target_T = np.array([34 + 0.5 * i for i in range(N)])
+    target_T = np.array([34 + 0.1 * i for i in range(N)])
 
     controller = TPTrackerMPC(
-        A, B, c, c1, c2, target_p, target_T, H=20, enable_input_constraints=False
+        A, B, c, c1, c2, target_p, target_T, H=20, enable_input_constraints=True
     )
 
     p0 = 1.0
     z0 = np.ones(n) * 34.0
 
     # state estimation
+    from mhe import MHE
     C = np.zeros((1, n))
     C[:,0] = 1.
     mhe = MHE(A, B, c, C, z0, 20)
@@ -124,17 +130,17 @@ if __name__ == "__main__":
         z[i + 1] = A @ z[i] + B @ u1[i] + c
         p[i + 1] = c1 * p[i] + c2 * u2[i]
 
-    plt.plot(z[:, 0], "--", label="temp")
-    plt.plot(target_T, label="target temp")
+    plt.plot(step_size*np.arange(N), z[:, 0], "--", label="temp")
+    plt.plot(step_size*np.arange(N), target_T, label="target temp")
     plt.legend()
     plt.show()
 
-    plt.plot(p, "--", label="pressure")
-    plt.plot(target_p, label="target pressure")
+    plt.plot(step_size*np.arange(N), p, "--", label="pressure")
+    plt.plot(step_size*np.arange(N), target_p, label="target pressure")
     plt.legend()
     plt.show()
 
-    plt.plot(u1, label="u1")
-    plt.plot(u2, label="u2")
+    plt.plot(step_size*np.arange(N), u1, label="u1")
+    plt.plot(step_size*np.arange(N), u2, label="u2")
     plt.legend()
     plt.show()
