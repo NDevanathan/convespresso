@@ -221,7 +221,7 @@ class PID(Controller):
 
 
 class IndependentMIAC(Controller):
-    def __init__(self, filter, P0, A0, B0, c0, num_states=1, *args, **kwargs):
+    def __init__(self, filter, P0, A0, B0, c0, *args, num_states=1, **kwargs):
         super().__init__(*args, **kwargs)
         assert P0.shape[0] == num_states * 8 + 2
         self.P = P0
@@ -233,11 +233,12 @@ class IndependentMIAC(Controller):
         self.filter = filter
         self.targets = np.array(self.targets)
         self.state = None
-        self.last_state = np.zeros((4, 0))
+        self.last_state = np.zeros((0, 2))
+        self.last_control = np.zeros((0, 2))
 
     def calc_flow(self):
         pass
-        
+
     def temp_control(self, secs):
         # Implement MRAC temperature control method here
         pass
@@ -247,21 +248,28 @@ class IndependentMIAC(Controller):
         pass
 
     def update_model(self):
-        if self.last_state.shape[1] == num_states:
-            phi = np.kron(np.concatenate((self.last_state.flatten(), [1])), np.eye(2))
-            deriv = FREQ * (self.state[:2] - self.last_state[:2, -1])
+        if self.last_state.shape[0] == self.num_states:
+            last_obs = np.concatenate((self.last_state.flatten(),
+                                       self.last_control.flatten(),
+                                       [1]))
+            phi = np.kron(last_obs, np.eye(2))
+            deriv = FREQ * (self.state[:2] - self.last_state[-1])
             K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
             self.ahat += K @ (deriv - phi @ self.ahat)
-            self.P = (np.eye(10) - K @ phi) @ self.P
-        stacked = self.ahat.reshape((2, num_states * 4 + 1))
-        self.Ahat = stacked[:, :num_states+1]
-        self.Bhat = stacked[:, num_states+1:2*num_states+1]
-        self.chat = stacked[:, 2*num_states+1]
+            self.P = (np.eye(num_states * 8 + 2) - K @ phi) @ self.P
+        stacked = self.ahat.reshape((2, self.num_states * 4 + 1))
+        self.Ahat = np.concatenate((
+            stacked[0, :2*self.num_states],
+
+        ))
+        self.Bhat = stacked[:, self.num_states+1:2*self.num_states+1]
+        self.chat = stacked[:, 2*self.num_states+1]
 
     def compute_action(self):
         if self.state is None:
             return np.zeros(2)
-        num_samples = 10 * FREQ
+
+        num_samples = 1 * FREQ
         r_cvx = cp.Variable((num_samples - 1, 2))
         traj = cp.Variable((num_samples, 2))
 
@@ -271,6 +279,7 @@ class IndependentMIAC(Controller):
         else:
             traj_err =  traj_diff @ np.diag([1, 1])
         obj = cp.sum_squares(traj_err) + cp.sum_squares(r_cvx)
+        obj += 9 * cp.sum_squares(traj_err[-1])
 
         endo = traj[:-1] @ self.Ahat.T + self.chat[None]
         exo = r_cvx @ self.Bhat.T
@@ -308,7 +317,7 @@ class IndependentMIAC(Controller):
 
             # Compute an optimal action
             action = list(self.compute_action())
-            
+
             if not self.brew_event.is_set():
                 start = next
 
