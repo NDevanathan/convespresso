@@ -227,7 +227,7 @@ class IndependentMRAC(Controller):
             endo = traj[:-1] @ np.diag(self.Am) + self.cm[None]
             exo = r_cvx @ np.diag(self.Bm)
             constraints = [
-                traj[1:] == endo + exo,
+                traj[1:] == traj[:-1] + PERIOD * (endo + exo),
                 0 <= r_cvx,
                 r_cvx <= 1,
                 traj[0] == self.state
