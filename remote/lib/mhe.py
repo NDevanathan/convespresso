@@ -45,7 +45,7 @@ class MHE:
 
         x = cp.Variable((N, self.n))
         w = cp.Variable((N, self.n))
-        v = cp.Variable((N, self.p))
+        # v = cp.Variable((N, self.p))
 
         cons = []
         for i in range(N):
@@ -53,10 +53,12 @@ class MHE:
                 cons.append(
                     x[i + 1, :] == self.A @ x[i, :] + self.B @ self.u_history[i] + w[i, :]
                 )
-            cons.append(self.y_history[i] == self.C @ x[i, :] + v[i, :])
+            # cons.append(self.y_history[i] == self.C @ x[i, :] + v[i, :])
+            cons.append(self.y_history[i] == self.C @ x[i, :])
 
         # solve mhe problem
-        obj = cp.sum_squares(x[0, :] - self.x0) + cp.sum_squares(v) + cp.sum_squares(w)
+        # obj = cp.sum_squares(x[0, :] - self.x0) + cp.sum_squares(v) + cp.sum_squares(w)
+        obj = cp.sum_squares(x[0, :] - self.x0) + cp.sum_squares(w)
         prob = cp.Problem(cp.Minimize(obj), cons)
         prob.solve()
 
