@@ -14,6 +14,12 @@ PERIOD = 1/FREQ
 DELTA = dt.timedelta(seconds=PERIOD) #seconds
 PERIODS_PER_FRAME = 15
 
+PRE_INF_DUR = 10
+RAMP_DUR = 5
+PRE_INF_LEVEL = 1/5
+RAMP_LEVEL = 3/5
+FLOW_TARG = 2
+
 class CommProcess(Process):
     def __init__(self, act_pipe, targ_pipe, state_queue, brew_event, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -72,20 +78,6 @@ class LowPassFilter:
             alpha = 1 - np.exp(-self.alpha_per_second * dt)
             self.state = alpha * value + (1 - alpha) * self.state
             return self.state
-
-
-# class FilterProcess(Process):
-#     def __init__(self, input_queue, output_queue, filter_obj, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.input_queue = input_queue
-#         self.output_queue = output_queue
-#         self.filter = filter_obj
-
-#     def run(self):
-#         while True:
-#             time, raw_state = self.input_queue.get()
-#             filtered_state = [self.filter.apply(time, s) for s in raw_state]
-#             self.output_queue.put((time, filtered_state))
 
 
 class Controller(Process, metaclass=ABCMeta):
@@ -147,15 +139,15 @@ class PID(Controller):
         return alpha*proportional + beta*integral + gamma*derivative
 
     def flow_control(self, secs):
-        if secs <= 10:
-            return 1/4
-        elif secs <= 15:
-            return 1/2
+        if secs <= PRE_INF_DUR:
+            return PRE_INF_LEVEL
+        elif secs <= PRE_INF_DUR + RAMP_DUR:
+            return RAMP_LEVEL
 
         flow = self.calc_flow()
-        pump_level = (1.5 * self.state[3] / flow) ** (0.5)
+        pump_level = (FLOW_TARG * self.state[3] / flow) ** (0.5)
 
-        if pump_level > 3/4: pump_level = 3/4
+        if pump_level > RAMP_LEVEL: pump_level = RAMP_LEVEL
         self.targets[2] += flow * PERIOD
         return pump_level
 
