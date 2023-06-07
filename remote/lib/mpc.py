@@ -1,7 +1,7 @@
 import cvxpy as cp
 
 
-class TPTrackerMPC:
+class TempTrackerMPC:
     """
     Simply track provided temperature and pressure trajectories
 
@@ -69,11 +69,11 @@ class TPTrackerMPC:
             )
         for i, _t in enumerate(range(t, t + H)):
             obj += cp.square(z_[i, 0] - self.target_T[_t])
-            obj += cp.square(p_[i] - self.target_p[_t])
+            # obj += cp.square(p_[i] - self.target_p[_t])
 
             # dynamics constraints
             cons.append(z_[i + 1, :] == self.A @ z_[i, :] + self.B @ u1[i, :] + self.c)
-            cons.append(p_[i + 1] == self.c1 * p_[i] + self.c2 * u2[i])
+            # cons.append(p_[i + 1] == self.c1 * p_[i] + self.c2 * u2[i])
 
         prob = cp.Problem(cp.Minimize(obj), cons)
         prob.solve(solver="CLARABEL")
@@ -86,11 +86,12 @@ if __name__ == "__main__":
     import numpy as np
     import matplotlib.pyplot as plt
     import pickle
+    from tqdm import tqdm
 
     N = 300
     step_size = 0.5
 
-    A, B, c = pickle.load(open("../notebooks/temp_dynamics_4.p", "rb"))
+    A, B, c = pickle.load(open("../../notebooks/temp_dynamics.p", "rb"))
     n, m = B.shape
 
     A = np.eye(n) + step_size * A
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     target_p = np.array([0.1 * i for i in range(N)])
     target_T = np.array([34 + 0.1 * i for i in range(N)])
 
-    controller = TPTrackerMPC(
+    controller = TempTrackerMPC(
         A, B, c, c1, c2, target_p, target_T, H=20, enable_input_constraints=True
     )
 
@@ -123,7 +124,7 @@ if __name__ == "__main__":
     u2 = np.zeros(N)
     p[0] = p0
     z[0] = z0
-    for i in range(N - 1):
+    for i in tqdm(range(N - 1)):
         u1[i], u2[i] = controller(i, p[i], mhe(z[i][0]))
         mhe.update(u1[i])
 
