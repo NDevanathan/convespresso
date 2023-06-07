@@ -400,7 +400,7 @@ class IndependentMRAC(Controller):
             pause.until(next)
 
 class MPC(Controller):
-    def __init__(self, A, B, c, target_T, C, x0, mhe_horizon, *args, H=10, **kwargs):
+    def __init__(self, A, B, c, target_T, C, mhe_horizon, *args, H=10, **kwargs):
         super().__init__(*args, **kwargs)
         self.A = A
         self.B = B
@@ -409,8 +409,6 @@ class MPC(Controller):
         self.target_T = target_T
         self.mhe_horizon = mhe_horizon
         self.n, self.m = self.B.shape
-
-        self.mhe = MHE(A, B, c, C, x0, mhe_horizon)
         self.controller = TempTrackerMPC(A, B, c, target_T, H=H)
 
     def run(self):
@@ -443,9 +441,18 @@ class MPC(Controller):
             pause.until(next)
 
 if __name__ == '__main__':
-    A0 = np.diag([-1, -1])
-    B0 = np.diag([1.78018046, 0.95982973])
-    c0 = np.array([0.17299905, 0.])
+    import pickle
+    A, B, c = pickle.load(open("../notebooks/temp_dynamics.p"))
+    target_T = 95
+
+    mhe_horizon = 10
+    C = np.zeros((1, len(c)))
+    C[:,0] = 1.
+    cont_proc = MPC(A, B, c, target_T, C, mhe_horizon)
+
+    # A0 = np.diag([-1, -1])
+    # B0 = np.diag([1.78018046, 0.95982973])
+    # c0 = np.array([0.17299905, 0.])
 
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
@@ -453,9 +460,9 @@ if __name__ == '__main__':
     brew_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
     filter = LowPassFilter(0.5)
-    cont_proc = IndependentMIAC(
-        filter, 7*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
-    )
+    # cont_proc = IndependentMIAC(
+    #     filter, 7*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+    # )
     comm_proc.start()
     cont_proc.start()
     input("Hit ENTER to start brewing.")
