@@ -195,7 +195,8 @@ class IndependentMRAC(Controller):
         self.r = np.array([], dtype=np.dtype('float64'))
         self.rt = None
 
-        self.Ktemp = solve_discrete_are(1 + PERIOD * Am[0], PERIOD * Bm[0], np.eye(1), np.eye(1))[0,0]
+        P = solve_discrete_are(1 + PERIOD * Am[0], PERIOD * Bm[0], np.eye(1), np.eye(1))[0,0]
+        self.Ktemp = PERIOD * Bm[0] * P
 
     def calc_flow(self):
         pass
@@ -242,6 +243,7 @@ class IndependentMRAC(Controller):
         elif self.brew_event.is_set():
             self.rt, self.r = self.r[0], self.r[1:]
         else:
+            self.rt = np.array([], dtype=np.dtype('float64'))
             self.r = -self.Ktemp * self.state + self.cm
             self.r[1] = 0.
 
