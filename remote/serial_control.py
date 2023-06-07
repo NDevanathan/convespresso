@@ -260,7 +260,7 @@ class IndependentMRAC(Controller):
     def update_model(self):
         # Implement MRAC model update method here
         err = self.state - self.targets
-        self.kx += -self.gamma * err * self.state * PERIOD / 10000
+        self.kx += -self.gamma * err * self.state * PERIOD / 1000000
         self.kr += -self.gamma * err * self.r * PERIOD
         print(self.kr)
         print(self.state)
