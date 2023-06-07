@@ -10,16 +10,17 @@ from lib.serial_courier import SerialCourier
 from lib.mhe import MHE
 from lib.mpc import TempTrackerMPC
 
-FREQ   = 20 #Hz
-PERIOD = 1/FREQ
-DELTA = dt.timedelta(seconds=PERIOD) #seconds
+FREQ = 20  # Hz
+PERIOD = 1 / FREQ
+DELTA = dt.timedelta(seconds=PERIOD)  # seconds
 PERIODS_PER_FRAME = 10
 
 PRE_INF_DUR = 10
 RAMP_DUR = 5
-PRE_INF_LEVEL = 1/5
-RAMP_LEVEL = 3/5
+PRE_INF_LEVEL = 1 / 5
+RAMP_LEVEL = 3 / 5
 FLOW_TARG = 2
+
 
 class CommProcess(Process):
     def __init__(self, act_pipe, targ_pipe, state_queue, brew_event, *args, **kwargs):
@@ -29,8 +30,8 @@ class CommProcess(Process):
         self.state_queue = state_queue
         self.brew_event = brew_event
         self.comms = SerialCourier()
-        self.action = [0.,0.]
-        self.targets = [95., 9., 0.]
+        self.action = [0.0, 0.0]
+        self.targets = [95.0, 9.0, 0.0]
 
     def run(self):
         i = 0
@@ -47,19 +48,20 @@ class CommProcess(Process):
 
             if not self.brew_event.is_set():
                 start = next
-                self.action[1] = 0.
+                self.action[1] = 0.0
                 self.comms.close_valve()
             else:
-                brew_time = (next-start).total_seconds()
+                brew_time = (next - start).total_seconds()
 
-            self.comms.take_action(self.action[0],self.action[1])
-            if i % PERIODS_PER_FRAME == 0: self.comms.refresh_display(
-                'ESPRESSO',
-                self.targets[0],
-                self.targets[1],
-                self.targets[2],
-                brew_time
-            )
+            self.comms.take_action(self.action[0], self.action[1])
+            if i % PERIODS_PER_FRAME == 0:
+                self.comms.refresh_display(
+                    "ESPRESSO",
+                    self.targets[0],
+                    self.targets[1],
+                    self.targets[2],
+                    brew_time,
+                )
 
             i += 1
             next += DELTA
@@ -90,25 +92,26 @@ class Controller(Process, metaclass=ABCMeta):
         self.brew_event = brew_event
         self.state = np.zeros(4)
 
-        self.targets = [94.5, 9., 0.]
-        self.flow_coefs = [6.4634e+02, -7.0024e+01,  4.6624e+00, -1.9119e-01]
+        self.targets = [94.5, 9.0, 0.0]
+        self.flow_coefs = [6.4634e02, -7.0024e01, 4.6624e00, -1.9119e-01]
 
     @abstractmethod
     def run(self):
         pass
 
+
 class OnOff(Controller):
     def temp_control(self, secs):
         if self.state[0] < self.targets[0]:
-            return 1.
+            return 1.0
         else:
-            return 0.
+            return 0.0
 
     def flow_control(self, secs):
         if self.state[1] < self.targets[1]:
-            return 1.
+            return 1.0
         else:
-            return 0.
+            return 0.0
 
     def run(self):
         start = dt.datetime.now()
@@ -117,11 +120,11 @@ class OnOff(Controller):
             while not self.state_queue.empty():
                 self.state = self.state_queue.get()
 
-            action = [0., 0.]
-            action[0] = self.temp_control((next-start).total_seconds())
+            action = [0.0, 0.0]
+            action[0] = self.temp_control((next - start).total_seconds())
 
             if self.brew_event.is_set():
-                action[1] = self.flow_control((next-start).total_seconds())
+                action[1] = self.flow_control((next - start).total_seconds())
             else:
                 self.targets[2] = 0
                 start = next
@@ -131,26 +134,27 @@ class OnOff(Controller):
             next += DELTA
             pause.until(next)
 
+
 class PID(Controller):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.heat_last_error = None
-        self.heat_last_integral = 0.
+        self.heat_last_integral = 0.0
         self.pump_last_error = None
-        self.pump_last_integral = 0.
+        self.pump_last_integral = 0.0
 
     def temp_control(self, secs):
         target = self.targets[0]
         curr_temp = self.state[0]
 
-        alpha = 1/15
-        beta = 1/5000
-        gamma = 1/20
+        alpha = 1 / 15
+        beta = 1 / 5000
+        gamma = 1 / 20
 
         error = target - curr_temp
 
         proportional = error
-        derivative = 0.
+        derivative = 0.0
         integral = self.heat_last_integral
 
         if not (self.heat_last_error is None):
@@ -158,20 +162,20 @@ class PID(Controller):
             integral += self.heat_last_error * PERIOD
 
         self.heat_last_error = error
-        return alpha*proportional + beta*integral + gamma*derivative
+        return alpha * proportional + beta * integral + gamma * derivative
 
     def flow_control(self, secs):
         target = self.targets[1]
         curr_temp = self.state[1]
 
-        alpha = 1/15
-        beta = 1/5000
-        gamma = 1/20
+        alpha = 1 / 15
+        beta = 1 / 5000
+        gamma = 1 / 20
 
         error = target - curr_temp
 
         proportional = error
-        derivative = 0.
+        derivative = 0.0
         integral = self.pump_last_integral
 
         if not (self.pump_last_error is None):
@@ -179,7 +183,7 @@ class PID(Controller):
             integral += self.pump_last_error * PERIOD
 
         self.pump_last_error = error
-        return alpha*proportional + beta*integral + gamma*derivative
+        return alpha * proportional + beta * integral + gamma * derivative
 
     def run(self):
         start = dt.datetime.now()
@@ -188,11 +192,11 @@ class PID(Controller):
             while not self.state_queue.empty():
                 self.state = self.state_queue.get()
 
-            action = [0., 0.]
-            action[0] = self.temp_control((next-start).total_seconds())
+            action = [0.0, 0.0]
+            action[0] = self.temp_control((next - start).total_seconds())
 
             if self.brew_event.is_set():
-                action[1] = self.flow_control((next-start).total_seconds())
+                action[1] = self.flow_control((next - start).total_seconds())
             else:
                 self.targets[2] = 0
                 start = next
@@ -223,24 +227,28 @@ class IndependentMIAC(Controller):
 
     def update_model(self):
         if self.last_state.shape[0] == self.num_states:
-            last_obs = np.concatenate((self.last_state.flatten(),
-                                       self.last_control.flatten(),
-                                       [1]))
+            last_obs = np.concatenate(
+                (self.last_state.flatten(), self.last_control.flatten(), [1])
+            )
             phi = np.kron(last_obs, np.eye(2))
             deriv = FREQ * (self.state - self.last_state[-1])
             K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
             self.ahat += K @ (deriv - phi @ self.ahat)
             self.P = (np.eye(self.num_states * 8 + 2) - K @ phi) @ self.P
         stacked = self.ahat.reshape((2, self.num_states * 4 + 1))
-        self.Ahat = np.concatenate((
-            stacked[:, :2*self.num_states],
-            np.eye(2*(self.num_states - 1), 2*self.num_states)
-        ))
-        self.Bhat = np.concatenate((
-            stacked[:, 2*self.num_states:4*self.num_states],
-            np.eye(2*(self.num_states - 1), 2*self.num_states)
-        ))
-        self.chat = stacked[:, 4*self.num_states]
+        self.Ahat = np.concatenate(
+            (
+                stacked[:, : 2 * self.num_states],
+                np.eye(2 * (self.num_states - 1), 2 * self.num_states),
+            )
+        )
+        self.Bhat = np.concatenate(
+            (
+                stacked[:, 2 * self.num_states : 4 * self.num_states],
+                np.eye(2 * (self.num_states - 1), 2 * self.num_states),
+            )
+        )
+        self.chat = stacked[:, 4 * self.num_states]
 
     def compute_action(self):
         if self.state is None:
@@ -254,7 +262,7 @@ class IndependentMIAC(Controller):
         if not self.brew_event.is_set():
             traj_err = traj_diff @ np.diag([1, 0])
         else:
-            traj_err =  traj_diff @ np.diag([1, 1])
+            traj_err = traj_diff @ np.diag([1, 1])
         obj = cp.sum_squares(traj_err) + cp.sum_squares(r_cvx)
         obj += 9 * cp.sum_squares(traj_err[-1])
 
@@ -266,12 +274,10 @@ class IndependentMIAC(Controller):
             r_cvx <= 1,
             r_cvx[:-1, :-2] == r_cvx[1:, 2:],
             r_cvx[0] == np.hstack((self.control, self.last_control[:-1].flatten())),
-            traj[0] == np.hstack((self.state, self.last_state[:-1].flatten()))
+            traj[0] == np.hstack((self.state, self.last_state[:-1].flatten())),
         ]
         if not self.brew_event.is_set():
-            constraints += [
-                r_cvx[1:, 1] == 0
-            ]
+            constraints += [r_cvx[1:, 1] == 0]
 
         prob = cp.Problem(cp.Minimize(obj), constraints)
         val = prob.solve()
@@ -279,7 +285,7 @@ class IndependentMIAC(Controller):
 
         print(r_cvx.value[0])
         print(traj.value[-1])
-        print('\n' +'*'*20)
+        print("\n" + "*" * 20)
         return np.clip(r_cvx.value[0], 0, 1)
 
     def run(self):
@@ -291,15 +297,21 @@ class IndependentMIAC(Controller):
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
                 print(obs)
                 if not (self.state is None):
-                    self.last_state, self.state = np.vstack((self.last_state, self.state)), obs[:2]
-                    self.last_control, self.control = np.vstack((self.last_control, self.control)), obs[2:]
+                    self.last_state, self.state = (
+                        np.vstack((self.last_state, self.state)),
+                        obs[:2],
+                    )
+                    self.last_control, self.control = (
+                        np.vstack((self.last_control, self.control)),
+                        obs[2:],
+                    )
                 else:
                     self.state = obs[:2]
                     self.control = obs[2:]
                 if self.last_state.shape[0] > self.num_states:
-                    self.last_state = self.last_state[-self.num_states:]
+                    self.last_state = self.last_state[-self.num_states :]
                 if self.last_control.shape[0] > self.num_states:
-                    self.last_control = self.last_control[-self.num_states:]
+                    self.last_control = self.last_control[-self.num_states :]
             print(self.last_state)
             print(self.last_control)
 
@@ -338,14 +350,18 @@ class IndependentMRAC(Controller):
         self.targets = np.array(self.targets[:2])
         self.state = np.zeros(2)
         self.controls = np.zeros(2)
-        self.r = np.array([], dtype=np.dtype('float64'))
+        self.r = np.array([], dtype=np.dtype("float64"))
         self.rt = None
 
     def update_model(self):
         # Implement MRAC model update method here
         err = self.state - self.targets
-        self.kx += -self.gamma * err * self.state * PERIOD * (1-(self.controls-0.5)**2)
-        self.kr += -self.gamma * err * self.rt * PERIOD * (1-(self.controls-0.5)**2)
+        self.kx += (
+            -self.gamma * err * self.state * PERIOD * (1 - (self.controls - 0.5) ** 2)
+        )
+        self.kr += (
+            -self.gamma * err * self.rt * PERIOD * (1 - (self.controls - 0.5) ** 2)
+        )
         self.controls = np.clip(self.kx * self.state + self.kr * self.rt, 0, 1)
         print(self.controls)
 
@@ -356,7 +372,7 @@ class IndependentMRAC(Controller):
             traj = cp.Variable((num_samples, 2))
 
             traj_diff = traj - self.targets[None]
-            traj_err =  traj_diff @ np.diag([1, 1])
+            traj_err = traj_diff @ np.diag([1, 1])
             obj = cp.sum_squares(traj_err) + cp.sum_squares(r_cvx)
 
             endo = traj[:-1] @ np.diag(self.Am) + self.cm[None]
@@ -365,7 +381,7 @@ class IndependentMRAC(Controller):
                 traj[1:] == traj[:-1] + PERIOD * (endo + exo),
                 0 <= r_cvx,
                 r_cvx <= 1,
-                traj[0] == self.state
+                traj[0] == self.state,
             ]
 
             prob = cp.Problem(cp.Minimize(obj), constraints)
@@ -376,7 +392,7 @@ class IndependentMRAC(Controller):
         self.rt, self.r = self.r[0], self.r[1:]
         if not self.brew_event.is_set():
             self.rt, self.r = self.r[0], self.r[1:]
-            self.r[1] = 0.
+            self.r[1] = 0.0
 
     def run(self):
         start = dt.datetime.now()
@@ -393,11 +409,11 @@ class IndependentMRAC(Controller):
             # Update MRAC model parameters if necessary
             self.update_model()
 
-            action = [0., 0.]
+            action = [0.0, 0.0]
             action[0] = self.controls[0]
 
             if self.brew_event.is_set():
-                action[1] =self.controls[1]
+                action[1] = self.controls[1]
             else:
                 start = next
 
@@ -406,9 +422,25 @@ class IndependentMRAC(Controller):
             next += DELTA
             pause.until(next)
 
+
 class MPC(Controller):
-    def __init__(self, A, B, c, target_T, C, mhe_horizon, *args, H=10, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        act_pipe,
+        targ_pipe,
+        state_queue,
+        brew_event,
+        A,
+        B,
+        c,
+        target_T,
+        C,
+        mhe_horizon,
+        *args,
+        H=10,
+        **kwargs
+    ):
+        super().__init__(act_pipe, targ_pipe, state_queue, brew_event, *args, **kwargs)
         self.A = A
         self.B = B
         self.c = c
@@ -434,7 +466,7 @@ class MPC(Controller):
             u = self.controller(self.t, self.mhe(self.state[0]))
             self.mhe.update(u)
 
-            action = [0., 0.]
+            action = [0.0, 0.0]
             action[0] = u
             if self.brew_event.is_set():
                 action[1] = 0
@@ -447,15 +479,15 @@ class MPC(Controller):
             self.t += 1
             pause.until(next)
 
-if __name__ == '__main__':
-    # import pickle
-    # A, B, c = pickle.load(open("../notebooks/temp_dynamics.p"))
-    # target_T = 95
 
-    # mhe_horizon = 10
-    # C = np.zeros((1, len(c)))
-    # C[:,0] = 1.
-    # cont_proc = MPC(A, B, c, target_T, C, mhe_horizon)
+if __name__ == "__main__":
+    import pickle
+    A, B, c = pickle.load(open("../notebooks/temp_dynamics.p", "rb"))
+    target_T = 95
+
+    mhe_horizon = 10
+    C = np.zeros((1, len(c)))
+    C[:, 0] = 1.0
 
     A0 = np.diag([-1, -1])
     B0 = np.diag([1.78018046, 0.95982973])
@@ -466,10 +498,22 @@ if __name__ == '__main__':
     state_queue = Queue()
     brew_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
-    filter = LowPassFilter(0.6)
-    cont_proc = IndependentMIAC(
-        filter, 7*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+    filter = LowPassFilter(0.5)
+    cont_proc = MPC(
+        act_pipe_cont,
+        targ_pipe_cont,
+        state_queue,
+        brew_event,
+        A,
+        B,
+        c,
+        target_T,
+        C,
+        mhe_horizon,
     )
+    # cont_proc = IndependentMIAC(
+    #     filter, 7*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+    # )
     comm_proc.start()
     cont_proc.start()
     input("Hit ENTER to start brewing.")
