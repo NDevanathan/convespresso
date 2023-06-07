@@ -216,6 +216,7 @@ class IndependentMIAC(Controller):
         self.filter = filter
         self.targets = np.array(self.targets)
         self.state = None
+        self.control = None
         self.last_state = np.zeros((0, 2))
         self.last_control = np.zeros((0, 2))
 
@@ -225,27 +226,30 @@ class IndependentMIAC(Controller):
                                        self.last_control.flatten(),
                                        [1]))
             phi = np.kron(last_obs, np.eye(2))
-            deriv = FREQ * (self.state[:2] - self.last_state[-1])
+            deriv = FREQ * (self.state - self.last_state[-1])
             K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
             self.ahat += K @ (deriv - phi @ self.ahat)
-            self.P = (np.eye(num_states * 8 + 2) - K @ phi) @ self.P
+            self.P = (np.eye(self.num_states * 8 + 2) - K @ phi) @ self.P
         stacked = self.ahat.reshape((2, self.num_states * 4 + 1))
         self.Ahat = np.concatenate((
             stacked[0, :2*self.num_states],
-
+            np.eye(2*(self.num_states - 1), 2*self.num_states)
         ))
-        self.Bhat = stacked[:, self.num_states+1:2*self.num_states+1]
-        self.chat = stacked[:, 2*self.num_states+1]
+        self.Bhat = np.concatenate((
+            stacked[:, 2*self.num_states:4*self.num_states],
+            np.eye(2*(self.num_states - 1), 2*self.num_states)
+        ))
+        self.chat = stacked[:, 4*self.num_states]
 
     def compute_action(self):
         if self.state is None:
             return np.zeros(2)
 
         num_samples = 1 * FREQ
-        r_cvx = cp.Variable((num_samples - 1, 2))
-        traj = cp.Variable((num_samples, 2))
+        r_cvx = cp.Variable((num_samples - 1, 2 * num_samples))
+        traj = cp.Variable((num_samples, 2 * num_samples))
 
-        traj_diff = traj - self.targets[None, :2]
+        traj_diff = traj[:, :2] - self.targets[None, :2]
         if not self.brew_event.is_set():
             traj_err = traj_diff @ np.diag([1, 0])
         else:
@@ -259,11 +263,13 @@ class IndependentMIAC(Controller):
             traj[1:] == traj[:-1] + PERIOD * (endo + exo),
             0 <= r_cvx,
             r_cvx <= 1,
-            traj[0] == self.state[:2]
+            r_cvx[:-1, :-1] == r_cvx[1:, 1:],
+            r_cvx[0] == np.hstack((self.control, self.last_control[:-1].flatten())),
+            traj[0] == np.hstack((self.state, self.last_state[:-1].flatten()))
         ]
         if not self.brew_event.is_set():
             constraints += [
-                r_cvx[:, 1] == 0
+                r_cvx[1:, 1] == 0
             ]
 
         prob = cp.Problem(cp.Minimize(obj), constraints)
@@ -282,7 +288,13 @@ class IndependentMIAC(Controller):
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
                 print(obs)
-                self.last_state, self.state = self.state, obs
+                if not (self.state is None):
+                    self.last_state, self.state = np.vstack((self.last_state, self.state)), obs[:2]
+                    self.last_control, self.control = np.vstack((self.last_control, self.control)), obs[2:]
+                if self.last_state.shape[0] > self.num_samples:
+                    self.last_state = self.last_state[-self.num_samples:]
+                if self.last_control.shape[0] > self.num_samples:
+                    self.last_control = self.last_control[-self.num_samples:]
 
             # Update the model dynamics
             self.update_model()
