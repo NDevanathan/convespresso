@@ -8,7 +8,7 @@ import pause
 
 from lib.serial_courier import SerialCourier
 from lib.mhe import MHE
-from lib.mpc import TPTrackerMPC
+from lib.mpc import TempTrackerMPC
 
 FREQ   = 20 #Hz
 PERIOD = 1/FREQ
@@ -388,53 +388,42 @@ class IndependentMRAC(Controller):
             pause.until(next)
 
 class MPC(Controller):
-    def __init__(self, A, B, c, c1, c2, target_p, target_T, C, x0, mhe_horizon, *args, H=None,
-            enable_input_constraints=True, **kwargs):
+    def __init__(self, A, B, c, target_T, C, x0, mhe_horizon, *args, H=10, **kwargs):
         super().__init__(*args, **kwargs)
+        self.A = A
+        self.B = B
+        self.c = c
+        self.C = C
+        self.target_T = target_T
+        self.mhe_horizon = mhe_horizon
+        self.n, self.m = self.B.shape
 
         self.mhe = MHE(A, B, c, C, x0, mhe_horizon)
-        self.controller = TPTrackerMPC(A, B, c, c1, c2, target_p, target_T, H=H,
-            enable_input_constraints=enable_input_constraints)
+        self.controller = TempTrackerMPC(A, B, c, target_T, H=H)
 
     def run(self):
-        n, m = self.B.shape
-        p0 = 1.0
-        z0 = np.ones(n) * 34.0
-
-        # state estimation
-        C = np.zeros((1, n))
-        C[:,0] = 1.
-        mhe = MHE(self.A, self.B, self.c, C, z0, 20)
-
-        p = np.zeros(N)
-        z = np.zeros((N, n))
-        u1 = np.zeros((N, m))
-        u2 = np.zeros(N)
-        p[0] = p0
-        z[0] = z0
-
         start = dt.datetime.now()
         next = start
+        self.t = 0
         while True:
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())[:2]
                 self.state = self.filter.apply(dt=PERIOD, value=obs)
 
-            u1[i], u2[i] = controller(i, p[i], mhe(z[i][0]))
-            mhe.update(u1[i])
+            u = self.controller(self.t, self.mhe(self.state[0]))
+            self.mhe.update(u)
 
-            z[i + 1] = A @ z[i] + B @ u1[i] + c
-            p[i + 1] = c1 * p[i] + c2 * u2[i]
-
-            action[0] = u1[0]
+            action = [0., 0.]
+            action[0] = u
             if self.brew_event.is_set():
-                action[1] = u2[0]
+                action[1] = 0
             else:
                 start = next
 
             self.act_pipe.send(action)
             self.targ_pipe.send(list(self.targets) + [0])
             next += DELTA
+            self.t += 1
             pause.until(next)
 
 if __name__ == '__main__':
