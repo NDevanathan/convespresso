@@ -207,6 +207,7 @@ class IndependentMIAC(Controller):
     def __init__(self, filter, P0, A0, B0, c0, *args, num_states=1, **kwargs):
         super().__init__(*args, **kwargs)
         assert P0.shape[0] == num_states * 8 + 2
+        self.num_states = num_states
         self.P = P0
         self.ahat = np.hstack((A0, B0, c0.reshape((-1, 1)))).flatten()
         self.Ahat = A0
@@ -232,7 +233,7 @@ class IndependentMIAC(Controller):
             self.P = (np.eye(self.num_states * 8 + 2) - K @ phi) @ self.P
         stacked = self.ahat.reshape((2, self.num_states * 4 + 1))
         self.Ahat = np.concatenate((
-            stacked[0, :2*self.num_states],
+            stacked[:, :2*self.num_states],
             np.eye(2*(self.num_states - 1), 2*self.num_states)
         ))
         self.Bhat = np.concatenate((
@@ -246,8 +247,8 @@ class IndependentMIAC(Controller):
             return np.zeros(2)
 
         num_samples = 1 * FREQ
-        r_cvx = cp.Variable((num_samples - 1, 2 * num_samples))
-        traj = cp.Variable((num_samples, 2 * num_samples))
+        r_cvx = cp.Variable((num_samples - 1, 2 * self.num_states))
+        traj = cp.Variable((num_samples, 2 * self.num_states))
 
         traj_diff = traj[:, :2] - self.targets[None, :2]
         if not self.brew_event.is_set():
@@ -263,7 +264,7 @@ class IndependentMIAC(Controller):
             traj[1:] == traj[:-1] + PERIOD * (endo + exo),
             0 <= r_cvx,
             r_cvx <= 1,
-            r_cvx[:-1, :-1] == r_cvx[1:, 1:],
+            r_cvx[:-1, :-2] == r_cvx[1:, 2:],
             r_cvx[0] == np.hstack((self.control, self.last_control[:-1].flatten())),
             traj[0] == np.hstack((self.state, self.last_state[:-1].flatten()))
         ]
@@ -273,7 +274,8 @@ class IndependentMIAC(Controller):
             ]
 
         prob = cp.Problem(cp.Minimize(obj), constraints)
-        prob.solve()
+        val = prob.solve()
+        print(val)
 
         print(r_cvx.value[0])
         print(traj.value[-1])
@@ -291,10 +293,15 @@ class IndependentMIAC(Controller):
                 if not (self.state is None):
                     self.last_state, self.state = np.vstack((self.last_state, self.state)), obs[:2]
                     self.last_control, self.control = np.vstack((self.last_control, self.control)), obs[2:]
-                if self.last_state.shape[0] > self.num_samples:
-                    self.last_state = self.last_state[-self.num_samples:]
-                if self.last_control.shape[0] > self.num_samples:
-                    self.last_control = self.last_control[-self.num_samples:]
+                else:
+                    self.state = obs[:2]
+                    self.control = obs[2:]
+                if self.last_state.shape[0] > self.num_states:
+                    self.last_state = self.last_state[-self.num_states:]
+                if self.last_control.shape[0] > self.num_states:
+                    self.last_control = self.last_control[-self.num_states:]
+            print(self.last_state)
+            print(self.last_control)
 
             # Update the model dynamics
             self.update_model()
@@ -441,28 +448,28 @@ class MPC(Controller):
             pause.until(next)
 
 if __name__ == '__main__':
-    import pickle
-    A, B, c = pickle.load(open("../notebooks/temp_dynamics.p"))
-    target_T = 95
+    # import pickle
+    # A, B, c = pickle.load(open("../notebooks/temp_dynamics.p"))
+    # target_T = 95
 
-    mhe_horizon = 10
-    C = np.zeros((1, len(c)))
-    C[:,0] = 1.
-    cont_proc = MPC(A, B, c, target_T, C, mhe_horizon)
+    # mhe_horizon = 10
+    # C = np.zeros((1, len(c)))
+    # C[:,0] = 1.
+    # cont_proc = MPC(A, B, c, target_T, C, mhe_horizon)
 
-    # A0 = np.diag([-1, -1])
-    # B0 = np.diag([1.78018046, 0.95982973])
-    # c0 = np.array([0.17299905, 0.])
+    A0 = np.diag([-1, -1])
+    B0 = np.diag([1.78018046, 0.95982973])
+    c0 = np.array([0.17299905, 0.])
 
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
     state_queue = Queue()
     brew_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
-    filter = LowPassFilter(0.5)
-    # cont_proc = IndependentMIAC(
-    #     filter, 7*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
-    # )
+    filter = LowPassFilter(0.6)
+    cont_proc = IndependentMIAC(
+        filter, 7*np.eye(10), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, brew_event
+    )
     comm_proc.start()
     cont_proc.start()
     input("Hit ENTER to start brewing.")
