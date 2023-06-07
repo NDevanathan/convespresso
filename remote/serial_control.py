@@ -422,6 +422,10 @@ class MPC(Controller):
                 obs = np.array(self.state_queue.get())[:2]
                 self.state = self.filter.apply(dt=PERIOD, value=obs)
 
+            if self.t == 0:
+                x0 = self.state[0] * np.ones(self.n)
+                self.mhe = MHE(self.A, self.B, self.c, self.C, x0, self.mhe_horizon)
+
             u = self.controller(self.t, self.mhe(self.state[0]))
             self.mhe.update(u)
 
