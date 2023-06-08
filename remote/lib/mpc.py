@@ -44,7 +44,6 @@ class TempTrackerMPC:
             if t + self.H < self.horizon
             else self.H - (t + self.H - self.horizon)
         )
-        print(z)
 
         # state
         z_ = cp.Variable((H + 1, self.n))

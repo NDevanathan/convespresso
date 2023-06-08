@@ -11,10 +11,10 @@ from lib.mhe import MHE
 from lib.mpc import TempTrackerMPC
 from lib.serial_courier import SerialCourier
 
-FREQ = 60  # Hz
+FREQ = 4  # Hz
 PERIOD = 1 / FREQ
 DELTA = dt.timedelta(seconds=PERIOD)  # seconds
-PERIODS_PER_FRAME = 15
+PERIODS_PER_FRAME = 2
 
 PRE_INF_DUR = 10
 RAMP_DUR = 5
@@ -519,9 +519,8 @@ class MPC(Controller):
 
             if self.state[0] >= 1e-5 and self.mhe is None:
                 x0 = self.state[0] * np.ones(self.n)
-                print(f'x0 = {x0}')
                 self.mhe = MHE(self.A, self.B, self.c, self.C, x0, self.mhe_horizon)
-                self.mhep = MHE(self.Ap, self.Bp, self.cp, self.Cp, 0.005, self.mhe_horizon)
+                self.mhep = MHE(self.Ap, self.Bp, self.cp, self.Cp, np.array([0.005]), self.mhe_horizon)
 
             if not self.mhe is None:
                 u = self.controller(self.t, self.mhe(self.state[0]))
@@ -552,6 +551,7 @@ class MPC(Controller):
             next += DELTA
             self.t += 1
             pause.until(next)
+            #print(dt.datetime.now())
 
 
 if __name__ == "__main__":
@@ -582,11 +582,6 @@ if __name__ == "__main__":
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
     filter = LowPassFilter(0.7)
     cont_proc = MPC(
-        act_pipe_cont,
-        targ_pipe_cont,
-        state_queue,
-        write_event,
-        brew_event,
         A,
         B,
         c,
@@ -594,17 +589,23 @@ if __name__ == "__main__":
         C,
         mhe_horizon,
         filter,
-        H=25
+        act_pipe_cont,
+        targ_pipe_cont,
+        state_queue,
+        temp_event,
+        write_event,
+        brew_event,
+        H=100
     )
     # cont_proc = IndependentMIAC(
     #     filter, 7*np.eye(4*8+2), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, write_event, brew_event,
     #     num_states=4
     # )
     # cont_proc = PID(filter, act_pipe_cont, targ_pipe_cont, state_queue, temp_event, write_event, brew_event)
-    cont_proc = OnOff(filter, act_pipe_cont, targ_pipe_cont, state_queue, temp_event, write_event, brew_event)
+    # cont_proc = OnOff(filter, act_pipe_cont, targ_pipe_cont, state_queue, temp_event, write_event, brew_event)
     comm_proc.start()
     cont_proc.start()
-    input("Hit ENTER to start measuring (do when temperature is near 80 C).")
+    #input("Hit ENTER to start measuring (do when temperature is near 80 C).")
     temp_event.set()
     #input("Hit ENTER to start brewing.")
     time.sleep(180)
