@@ -14,13 +14,30 @@ from lib.serial_courier import SerialCourier
 FREQ = 4  # Hz
 PERIOD = 1 / FREQ
 DELTA = dt.timedelta(seconds=PERIOD)  # seconds
-PERIODS_PER_FRAME = 2
+PERIODS_PER_FRAME = 1
+DUR = 40
 
 PRE_INF_DUR = 10
 RAMP_DUR = 5
 PRE_INF_LEVEL = 1 / 5
 RAMP_LEVEL = 3 / 5
 FLOW_TARG = 2
+
+CURVE_PRESSURE = np.zeros(FREQ*DUR + 20)
+for i in range(FREQ * DUR):
+    x = i / FREQ
+    CURVE_PRESSURE[i] = (1/6000)*x**3 - (1/55)*(x-15)**2 - (1/20)*x + 9
+
+for i in range(FREQ*DUR, FREQ*DUR + 20):
+    CURVE_PRESSURE[i] = CURVE_PRESSURE[FREQ*DUR - 1]
+
+CURVE_TEMP = np.zeros(FREQ*DUR + 20)
+for i in range(FREQ * DUR):
+    x = i / FREQ
+    CURVE_TEMP[i] = 92-(x/20)
+
+for i in range(FREQ*DUR, FREQ*DUR + 20):
+    CURVE_TEMP[i] = CURVE_TEMP[FREQ*DUR - 1]
 
 
 class CommProcess(Process):
@@ -33,6 +50,7 @@ class CommProcess(Process):
         self.comms = SerialCourier()
         self.action = [0.0, 0.0]
         self.targets = [95.0, 9.0, 0.0]
+        self.temperature = 0.
 
     def run(self):
         i = 0
@@ -41,7 +59,9 @@ class CommProcess(Process):
         brew_time = 0
 
         while True:
-            self.state_queue.put(self.comms.get_state())
+            curr_state = self.comms.get_state()
+            self.temperature = curr_state[0]
+            self.state_queue.put(curr_state)
             while self.targ_pipe.poll():
                 self.targets = self.targ_pipe.recv()
             while self.act_pipe.poll():
@@ -54,6 +74,8 @@ class CommProcess(Process):
             else:
                 brew_time = (next - start).total_seconds()
 
+            if self.temperature > 110:
+                self.action[0] = 0.
             self.comms.take_action(self.action[0], self.action[1])
             if i % PERIODS_PER_FRAME == 0:
                 self.comms.refresh_display(
@@ -94,8 +116,9 @@ class Controller(Process, metaclass=ABCMeta):
         self.write_event = write_event
         self.brew_event = brew_event
         self.state = np.zeros(4)
+        self.counter = 0
 
-        self.targets = [92, 9.0, 0.0]
+        self.targets = [CURVE_TEMP[0], CURVE_PRESSURE[0], 0.]
         self.flow_coefs = [6.4634e02, -7.0024e01, 4.6624e00, -1.9119e-01]
 
     @abstractmethod
@@ -126,6 +149,7 @@ class OnOff(Controller):
         next = start
         start_secs = time.time()
         while True:
+            self.target = [CURVE_TEMP[self.counter], CURVE_PRESSURE[self.counter], 0.]
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
@@ -139,6 +163,7 @@ class OnOff(Controller):
 
             if self.brew_event.is_set():
                 action[1] = self.flow_control((next - start).total_seconds())
+                self.counter += 1
             else:
                 self.targets[2] = 0
                 start = next
@@ -212,6 +237,7 @@ class PID(Controller):
         next = start
         start_secs = time.time()
         while True:
+            self.target = [CURVE_TEMP[self.counter], CURVE_PRESSURE[self.counter], 0.]
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
@@ -224,6 +250,7 @@ class PID(Controller):
                 action[0] = self.temp_control((next - start).total_seconds())
 
             if self.brew_event.is_set():
+                self.counter += 1
                 action[1] = self.flow_control((next - start).total_seconds())
             else:
                 self.targets[2] = 0
@@ -259,6 +286,7 @@ class IndependentMIAC(Controller):
         self.control = None
         self.last_state = np.zeros((0, 2))
         self.last_control = np.zeros((0, 2))
+        self.data = np.zeros((0, 5))
 
     def update_model(self):
         if self.last_state.shape[0] == self.num_states:
@@ -267,11 +295,9 @@ class IndependentMIAC(Controller):
             )
             phi = np.kron(last_obs, np.eye(2))
             deriv = FREQ * (self.state - self.last_state[-1])
-            # K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
-            # self.ahat += K @ (deriv - phi @ self.ahat)
-            # self.P = (np.eye(self.num_states * 8 + 2) - K @ phi) @ self.P
-            self.ahat += PERIOD * self.P @ phi.T @ (deriv - phi) @ self.ahat
-            self.P += -PERIOD * self.P @ phi.T @ phi @ self.P
+            K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
+            self.ahat += K @ (deriv - phi @ self.ahat)
+            self.P = (np.eye(self.num_states * 8 + 2) - K @ phi) @ self.P
         stacked = self.ahat.reshape((2, self.num_states * 4 + 1))
         self.Ahat = np.vstack(
             (
@@ -286,15 +312,15 @@ class IndependentMIAC(Controller):
             )
         )
         self.chat = np.pad(stacked[:, 4 * self.num_states], (0, 2*self.num_states - 2), mode='constant')
-        print(self.Ahat)
-        print(self.Bhat)
-        print(self.chat)
+        # print(self.Ahat)
+        # print(self.Bhat)
+        # print(self.chat)
 
     def compute_action(self):
         if self.state is None or self.last_state.shape[0] < self.num_states:
             return np.zeros(2)
 
-        num_samples = 1 * FREQ
+        num_samples = 2 * FREQ
         r_cvx = cp.Variable((num_samples - 1, 2 * self.num_states))
         traj = cp.Variable((num_samples, 2 * self.num_states))
 
@@ -326,7 +352,7 @@ class IndependentMIAC(Controller):
         val = prob.solve()
         # print(val)
 
-        # print(r_cvx.value[0])
+        # print(r_cvx.value[1])
         # print(traj.value[-1])
         # print("\n" + "*" * 20)
         return np.clip(r_cvx.value[1], 0, 1)
@@ -334,7 +360,9 @@ class IndependentMIAC(Controller):
     def run(self):
         start = dt.datetime.now()
         next = start
+        start_secs = time.time()
         while True:
+            self.target = [CURVE_TEMP[self.counter], CURVE_PRESSURE[self.counter], 0.]
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
@@ -355,23 +383,34 @@ class IndependentMIAC(Controller):
                     self.last_state = self.last_state[-self.num_states :]
                 if self.last_control.shape[0] > self.num_states:
                     self.last_control = self.last_control[-self.num_states :]
+                t = time.time() - start_secs
+                self.data = np.vstack((self.data, np.concatenate(([t], obs))))
             print(self.last_state)
             print(self.last_control)
 
             # Update the model dynamics
             self.update_model()
 
+            if self.write_event.is_set():
+                # do writing here
+                np.savetxt(f'../logs/log_miac_{int(time.time())}.csv', self.data, delimiter=',')
+                print("Done writing")
+                self.act_pipe.send([0.,0.])
+                return
+
             # Compute an optimal action
             action = list(self.compute_action())
 
             if not self.brew_event.is_set():
                 start = next
+            else:
+                self.counter += 1
 
             self.act_pipe.send(action)
             self.targ_pipe.send(list(self.targets))
             next += DELTA
             pause.until(next)
-            print(dt.datetime.now())
+            # print(dt.datetime.now())
 
 
 class IndependentMRAC(Controller):
@@ -511,6 +550,7 @@ class MPC(Controller):
         self.t = 0
         start_secs = time.time()
         while True:
+            self.target = [CURVE_TEMP[self.counter], CURVE_PRESSURE[self.counter], 0.]
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
@@ -534,6 +574,7 @@ class MPC(Controller):
             if self.temp_event.is_set():
                 action[0] = float(u)
             if self.brew_event.is_set():
+                self.counter += 1
                 up = self.controllerp(self.t, self.mhep(self.state[1]))
                 self.mhep.update(up)
                 action[1] = max(float(up), 0.001)
@@ -565,7 +606,7 @@ if __name__ == "__main__":
 
     target_T = 92
 
-    mhe_horizon = 10
+    mhe_horizon = 100
     C = np.zeros((1, len(c)))
     C[:, 0] = 1.0
 
@@ -582,7 +623,7 @@ if __name__ == "__main__":
     brew_event = Event()
     write_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
-    filter = LowPassFilter(0.7)
+    filter = LowPassFilter(0.8)
     cont_proc = MPC(
         A,
         B,
@@ -597,20 +638,20 @@ if __name__ == "__main__":
         temp_event,
         write_event,
         brew_event,
-        H=100
+        H=200
     )
     # cont_proc = IndependentMIAC(
-    #     filter, 7*np.eye(4*8+2), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, write_event, brew_event,
+    #     filter, 7*np.eye(4*8+2), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, temp_event, write_event, brew_event,
     #     num_states=4
     # )
     # cont_proc = PID(filter, act_pipe_cont, targ_pipe_cont, state_queue, temp_event, write_event, brew_event)
     # cont_proc = OnOff(filter, act_pipe_cont, targ_pipe_cont, state_queue, temp_event, write_event, brew_event)
     comm_proc.start()
     cont_proc.start()
-    #input("Hit ENTER to start measuring (do when temperature is near 80 C).")
+    # input("Hit ENTER to start measuring (do when temperature is near 80 C).")
     temp_event.set()
     #input("Hit ENTER to start brewing.")
-    time.sleep(180)
+    time.sleep(120)
     brew_event.set()
     #input("Hit ENTER to stop brewing.")
     time.sleep(40)
