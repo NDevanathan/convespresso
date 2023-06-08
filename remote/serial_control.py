@@ -15,29 +15,12 @@ FREQ = 4  # Hz
 PERIOD = 1 / FREQ
 DELTA = dt.timedelta(seconds=PERIOD)  # seconds
 PERIODS_PER_FRAME = 1
-DUR = 40
 
 PRE_INF_DUR = 10
 RAMP_DUR = 5
 PRE_INF_LEVEL = 1 / 5
 RAMP_LEVEL = 3 / 5
 FLOW_TARG = 2
-
-CURVE_PRESSURE = np.zeros(FREQ*DUR + 20)
-for i in range(FREQ * DUR):
-    x = i / FREQ
-    CURVE_PRESSURE[i] = (1/6000)*x**3 - (1/55)*(x-15)**2 - (1/20)*x + 9
-
-for i in range(FREQ*DUR, FREQ*DUR + 20):
-    CURVE_PRESSURE[i] = CURVE_PRESSURE[FREQ*DUR - 1]
-
-CURVE_TEMP = np.zeros(FREQ*DUR + 20)
-for i in range(FREQ * DUR):
-    x = i / FREQ
-    CURVE_TEMP[i] = 92-(x/20)
-
-for i in range(FREQ*DUR, FREQ*DUR + 20):
-    CURVE_TEMP[i] = CURVE_TEMP[FREQ*DUR - 1]
 
 
 class CommProcess(Process):
@@ -149,7 +132,6 @@ class OnOff(Controller):
         next = start
         start_secs = time.time()
         while True:
-            self.target = [CURVE_TEMP[self.counter], CURVE_PRESSURE[self.counter], 0.]
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
@@ -237,7 +219,6 @@ class PID(Controller):
         next = start
         start_secs = time.time()
         while True:
-            self.target = [CURVE_TEMP[self.counter], CURVE_PRESSURE[self.counter], 0.]
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
@@ -362,7 +343,6 @@ class IndependentMIAC(Controller):
         next = start
         start_secs = time.time()
         while True:
-            self.target = [CURVE_TEMP[self.counter], CURVE_PRESSURE[self.counter], 0.]
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
@@ -550,7 +530,6 @@ class MPC(Controller):
         self.t = 0
         start_secs = time.time()
         while True:
-            self.target = [CURVE_TEMP[self.counter], CURVE_PRESSURE[self.counter], 0.]
             while not self.state_queue.empty():
                 obs = np.array(self.state_queue.get())
                 obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
