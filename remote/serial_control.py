@@ -85,16 +85,17 @@ class LowPassFilter:
 
 
 class Controller(Process, metaclass=ABCMeta):
-    def __init__(self, act_pipe, targ_pipe, state_queue, write_event, brew_event, *args, **kwargs):
+    def __init__(self, act_pipe, targ_pipe, state_queue, temp_event, write_event, brew_event, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.act_pipe = act_pipe
         self.targ_pipe = targ_pipe
         self.state_queue = state_queue
-        self.brew_event = brew_event
+        self.temp_event = temp_event
         self.write_event = write_event
+        self.brew_event = brew_event
         self.state = np.zeros(4)
 
-        self.targets = [94.5, 9.0, 0.0]
+        self.targets = [92, 9.0, 0.0]
         self.flow_coefs = [6.4634e02, -7.0024e01, 4.6624e00, -1.9119e-01]
 
     @abstractmethod
@@ -133,7 +134,8 @@ class OnOff(Controller):
                 self.data = np.vstack((self.data, np.concatenate(([t], obs))))
 
             action = [0.0, 0.0]
-            action[0] = self.temp_control((next - start).total_seconds())
+            if self.temp_event.is_set():
+                action[0] = self.temp_control((next - start).total_seconds())
 
             if self.brew_event.is_set():
                 action[1] = self.flow_control((next - start).total_seconds())
@@ -218,7 +220,8 @@ class PID(Controller):
                 self.data = np.vstack((self.data, np.concatenate(([t], obs))))
 
             action = [0.0, 0.0]
-            action[0] = self.temp_control((next - start).total_seconds())
+            if self.temp_event.is_set():
+                action[0] = self.temp_control((next - start).total_seconds())
 
             if self.brew_event.is_set():
                 action[1] = self.flow_control((next - start).total_seconds())
@@ -450,7 +453,8 @@ class IndependentMRAC(Controller):
             self.update_model()
 
             action = [0.0, 0.0]
-            action[0] = self.controls[0]
+            if self.temp_event.is_set():
+                action[0] = self.controls[0]
 
             if self.brew_event.is_set():
                 action[1] = self.controls[1]
@@ -466,11 +470,6 @@ class IndependentMRAC(Controller):
 class MPC(Controller):
     def __init__(
         self,
-        act_pipe,
-        targ_pipe,
-        state_queue,
-        write_event,
-        brew_event,
         A,
         B,
         c,
@@ -487,7 +486,7 @@ class MPC(Controller):
         target_P=9,
         **kwargs
     ):
-        super().__init__(act_pipe, targ_pipe, state_queue, write_event, brew_event, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.A = A
         self.B = B
         self.c = c
@@ -533,7 +532,8 @@ class MPC(Controller):
                 u = 0.
 
             action = [0.0, 0.0]
-            action[0] = float(u)
+            if self.temp_event.is_set():
+                action[0] = float(u)
             if self.brew_event.is_set():
                 up = self.controllerp(self.t, self.mhep(self.state[1]))
                 self.mhep.update(up)
@@ -563,7 +563,7 @@ if __name__ == "__main__":
     B *= PERIOD
     c *= PERIOD
 
-    target_T = 90
+    target_T = 92
 
     mhe_horizon = 10
     C = np.zeros((1, len(c)))
@@ -578,6 +578,7 @@ if __name__ == "__main__":
     act_pipe_cont, act_pipe_comm = Pipe()
     targ_pipe_cont, targ_pipe_comm = Pipe()
     state_queue = Queue()
+    temp_event = Event()
     brew_event = Event()
     write_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
@@ -601,13 +602,18 @@ if __name__ == "__main__":
     #     filter, 7*np.eye(4*8+2), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, write_event, brew_event,
     #     num_states=4
     # )
-    # cont_proc = PID(filter, act_pipe_cont, targ_pipe_cont, state_queue, write_event, brew_event)
-    # cont_proc = OnOff(filter, act_pipe_cont, targ_pipe_cont, state_queue, write_event, brew_event)
+    # cont_proc = PID(filter, act_pipe_cont, targ_pipe_cont, state_queue, temp_event, write_event, brew_event)
+    cont_proc = OnOff(filter, act_pipe_cont, targ_pipe_cont, state_queue, temp_event, write_event, brew_event)
     comm_proc.start()
     cont_proc.start()
-    input("Hit ENTER to start brewing.")
+    input("Hit ENTER to start measuring (do when temperature is near 80 C).")
+    temp_event.set()
+    #input("Hit ENTER to start brewing.")
+    time.sleep(180)
     brew_event.set()
-    input("Hit ENTER to stop brewing.")
+    #input("Hit ENTER to stop brewing.")
+    time.sleep(40)
     brew_event.clear()
-    input("Hit ENTER to stop data collection.")
+    #input("Hit ENTER to stop data collection.")
+    time.sleep(20)
     write_event.set()
