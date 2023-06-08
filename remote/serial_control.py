@@ -264,9 +264,11 @@ class IndependentMIAC(Controller):
             )
             phi = np.kron(last_obs, np.eye(2))
             deriv = FREQ * (self.state - self.last_state[-1])
-            K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
-            self.ahat += K @ (deriv - phi @ self.ahat)
-            self.P = (np.eye(self.num_states * 8 + 2) - K @ phi) @ self.P
+            # K = np.linalg.solve(np.eye(2) + phi @ self.P @ phi.T, phi @ self.P.T).T
+            # self.ahat += K @ (deriv - phi @ self.ahat)
+            # self.P = (np.eye(self.num_states * 8 + 2) - K @ phi) @ self.P
+            self.ahat += PERIOD * self.P @ phi.T @ (deriv - phi) @ self.ahat
+            self.P += -PERIOD * self.P @ phi.T @ phi @ self.P
         stacked = self.ahat.reshape((2, self.num_states * 4 + 1))
         self.Ahat = np.vstack(
             (
