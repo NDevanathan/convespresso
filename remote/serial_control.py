@@ -477,6 +477,11 @@ class MPC(Controller):
         filter,
         *args,
         H=10,
+        Ap=np.array([[-0.07032745]]),
+        Bp=np.array([[0.95982973]]),
+        cp=np.zeros(1),
+        Cp=np.ones((1, 1)),
+        target_P=9,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -488,26 +493,38 @@ class MPC(Controller):
         self.mhe_horizon = mhe_horizon
         self.n, self.m = self.B.shape
         self.controller = TempTrackerMPC(A, B, c, target_T, H=H)
+        self.controllerp = TempTrackerMPC(Ap, Bp, cp, target_P, H=H)
         self.filter = filter
         self.mhe = None
+        self.mhep = None
+        self.Ap = Ap
+        self.Bp = Bp
+        self.cp = cp
+        self.Cp = Cp
+        self.data = np.zeros((0, 5))
 
     def run(self):
         start = dt.datetime.now()
         next = start
         self.t = 0
+        start_secs = time.time()
         while True:
             while not self.state_queue.empty():
-                obs = np.array(self.state_queue.get())[:2]
-                self.state = self.filter.apply(dt=PERIOD, value=obs)
+                obs = np.array(self.state_queue.get())
+                obs[:2] = self.filter.apply(dt=PERIOD, value=obs[:2])
+                self.state = obs[:2]
+                self.curr_u = obs[2:]
+                tiem = time.time() - start_secs
+                self.data = np.vstack((self.data, np.concatenate(([tiem], obs))))
 
             if self.state[0] >= 1e-5 and self.mhe is None:
                 x0 = self.state[0] * np.ones(self.n)
                 print(f'x0 = {x0}')
                 self.mhe = MHE(self.A, self.B, self.c, self.C, x0, self.mhe_horizon)
+                self.mhep = MHE(self.Ap, self.Bp, self.cp, self.Cp, 0.005, self.mhe_horizon)
 
             if not self.mhe is None:
                 u = self.controller(self.t, self.mhe(self.state[0]))
-                print(u)
                 self.mhe.update(u)
             else:
                 u = 0.
@@ -516,11 +533,20 @@ class MPC(Controller):
             if self.temp_event.is_set():
                 action[0] = float(u)
             if self.brew_event.is_set():
-                action[1] = 0
+                up = self.controllerp(self.t, self.mhep(self.state[1]))
+                self.mhep.update(up)
+                action[1] = max(float(up), 0.001)
             else:
+                action[1] = 0.
                 start = next
 
-            print(action)
+            if self.write_event.is_set():
+                # do writing here
+                np.savetxt(f'../logs/log_mpc_{int(time.time())}.csv', self.data, delimiter=',')
+                print("Done writing")
+                self.act_pipe.send([0.,0.])
+                return
+
             self.act_pipe.send(action)
             self.targ_pipe.send(list(self.targets) + [0])
             next += DELTA
@@ -555,20 +581,21 @@ if __name__ == "__main__":
     write_event = Event()
     comm_proc = CommProcess(act_pipe_comm, targ_pipe_comm, state_queue, brew_event)
     filter = LowPassFilter(0.7)
-    # cont_proc = MPC(
-    #     act_pipe_cont,
-    #     targ_pipe_cont,
-    #     state_queue,
-    #     brew_event,
-    #     A,
-    #     B,
-    #     c,
-    #     target_T,
-    #     C,
-    #     mhe_horizon,
-    #     filter,
-    #     H=25
-    # )
+    cont_proc = MPC(
+        act_pipe_cont,
+        targ_pipe_cont,
+        state_queue,
+        write_event,
+        brew_event,
+        A,
+        B,
+        c,
+        target_T,
+        C,
+        mhe_horizon,
+        filter,
+        H=25
+    )
     # cont_proc = IndependentMIAC(
     #     filter, 7*np.eye(4*8+2), A0, B0, c0, act_pipe_cont, targ_pipe_cont, state_queue, write_event, brew_event,
     #     num_states=4

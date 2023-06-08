@@ -76,7 +76,7 @@ if __name__ == "__main__":
     N = 100
     step_size = 0.5
 
-    A, B, c = pickle.load(open("../../notebooks/temp_dynamics.p", "rb"))
+    A, B, c = pickle.load(open("notebooks/temp_dynamics.p", "rb"))
     n, m = B.shape
 
     A = np.eye(n) + step_size * A
@@ -84,10 +84,10 @@ if __name__ == "__main__":
     c *= step_size
 
     # target_T = np.array([34 + 0.1 * i for i in range(N)])
-    target_T = 60
+    target_T = 92
 
     controller = TempTrackerMPC(
-        A, B, c, target_T, H=10, enable_input_constraints=True
+        A, B, c, target_T, H=50, enable_input_constraints=True
     )
 
     z0 = np.ones(n) * 34.0
