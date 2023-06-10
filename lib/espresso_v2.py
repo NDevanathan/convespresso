@@ -71,6 +71,9 @@ class EspressoMachine():
         self.display     = Display(self.spi1, dc=SCR_DC, cs=SCR_CS, rst=SCR_RST)
         self.temp_probe  = MAX6675(sck=TEMP_SCK, cs=TEMP_CS, so=TEMP_SO)
 
+    def is_brewing(self) -> bool:
+        return not SWT_BREW.value()
+        
     def poll_temp(self) -> float:
         """
         Read the current temperature from the temperature probe in Celsius.
@@ -236,10 +239,10 @@ class EspressoMachine():
         """
         Display boot screen on the display.
         """
-        display.draw_bitmap("res/cvx.mono", WIDTH // 2 - 50, HEIGHT // 2 - 25, 100, 50, rotate=180)
-        display.present()
+        self.display.draw_bitmap("res/cvx.mono", WIDTH // 2 - 50, HEIGHT // 2 - 25, 100, 50, rotate=180)
+        self.display.present()
         time.sleep(3)
-        display.clear()
+        self.display.clear()
 
     def update_display(self, mode: str, temp_targ: float, pres_targ: float, mass_targ: float, sec: float):
         """
