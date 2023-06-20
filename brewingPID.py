@@ -2,8 +2,8 @@ import time
 import math
 from espresso import EspressoMachine, BrewState
 
-PRE_INF_DUR = 8.
-TEMP_TARG = 92
+PRE_INF_DUR = 12.
+TEMP_TARG = 94.5
 PRESS_TARG = 9.
 
 PERIODS_PER_FRAME = 10
