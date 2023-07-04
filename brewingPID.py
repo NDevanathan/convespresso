@@ -2,8 +2,10 @@ import time
 import math
 from espresso import EspressoMachine, BrewState
 
-PRE_INF_DUR = 12.
-TEMP_TARG = 94.5
+PRE_INF_ON = 2.
+PRE_INF_OFF = 4.
+RAMP_DUR = 4.
+TEMP_TARG = 94.
 PRESS_TARG = 9.
 
 PERIODS_PER_FRAME = 10
@@ -35,6 +37,7 @@ class Brewer():
         self.em = EspressoMachine()
         self.temp_filter = LowPassFilter(0.8)
         self.press_filter = LowPassFilter(0.8)
+        self.plevel_filter = LowPassFilter(0.8)
         self.total_flow = 0
 
     def get_state(self):
@@ -101,13 +104,13 @@ class Brewer():
 
     def press_control(self):
         target = PRESS_TARG
-        curr_temp = self.state[1]
+        curr_press = self.state[1]
 
         alpha = 1 / 5
         beta = 0
         gamma = 0
 
-        error = target - curr_temp
+        error = target - curr_press
         proportional = error
         derivative = 0.0
         integral = self.pump_last_integral
@@ -130,21 +133,29 @@ class Brewer():
             self.state = self.get_state()
             self.state[0] = self.temp_filter.apply(dt=PERIOD, value=self.state[0])
             self.state[1] = self.press_filter.apply(dt=PERIOD, value=self.state[1])
+            self.state[3] = self.plevel_filter.apply(dt=PERIOD, value=self.state[3])
             flow = self.em.calc_flow(self.state[1], self.state[3]) * PERIOD
 
             action = [0.0, 0.0]
             action[0] = self.temp_control()
-            
-            if time.ticks_diff(next, start) / 1000 < PRE_INF_DUR:
-                PRESS_TARG = 0.6
-            else:
-                PRESS_TARG = 9.
 
             if self.em.is_brewing():
+                PRESS_TARG = 9.
                 if not brewing:
                     self.total_flow = 0
-                self.total_flow += flow
-                action[1] = self.press_control()
+                
+                if time.ticks_diff(next, start) / 1000 < PRE_INF_ON:
+                    action[1] = 0.1
+                elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF:
+                    action[1] = 0.
+                elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF + RAMP_DUR:
+                    ramp = (time.ticks_diff(next, start) / 1000) - PRE_INF_ON + PRE_INF_OFF
+                    action[1] = 0.1 + ramp / 10
+                    self.total_flow += flow
+                else:
+                    action[1] = self.press_control()
+                    self.total_flow += flow
+                
                 brewing = True
                 shot_time = time.ticks_diff(next, start) / 1000
             else:
