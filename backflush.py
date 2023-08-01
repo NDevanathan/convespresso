@@ -2,10 +2,10 @@ import time
 import math
 from espresso import EspressoMachine, BrewState
 
-PRE_INF_ON = 2.5
-PRE_INF_OFF = 4.
-RAMP_DUR = 2.
-TEMP_TARG = 95.
+PRE_INF_ON = 0.
+PRE_INF_OFF = 0.
+RAMP_DUR = 10.
+TEMP_TARG = 93.
 PRESS_TARG = 9.
 
 PERIODS_PER_FRAME = 10
@@ -149,8 +149,7 @@ class Brewer():
                 elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF:
                     action[1] = 0.
                 elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF + RAMP_DUR:
-                    ramp = (time.ticks_diff(next, start) / 1000) - PRE_INF_ON + PRE_INF_OFF
-                    action[1] = 0.1 + ramp / 10
+                    action[1] = 1.
                     self.total_flow += flow
                 else:
                     action[1] = self.press_control()
