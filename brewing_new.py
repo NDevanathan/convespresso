@@ -40,8 +40,8 @@ class Brewer():
         self.k_flow = -0.04
         
         # heating parameters
-        self.alpha = 1
-        self.beta = 5
+        self.alpha = 3
+        self.beta = 10
         self.gamma = 0.8
         
         self.heat_effect = 0
