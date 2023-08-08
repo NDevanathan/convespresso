@@ -2,14 +2,19 @@ import time
 import math
 from espresso import EspressoMachine, BrewState
 
+# Brew phase controls
 PRE_INF_ON = 2.5
 PRE_INF_OFF = 4.
 RAMP_DUR = 2.
+
+# Brew targets
 TEMP_TARG = 94.
+TEMP_AMB = 24.5
 PRESS_TARG = 9.
 
-PERIODS_PER_FRAME = 10
-FREQ = 50
+# Loop frequency controls
+PERIODS_PER_FRAME = 2
+FREQ = 10
 PERIOD = 1/FREQ
 DELTA = 1000//FREQ
 
@@ -29,9 +34,19 @@ class LowPassFilter:
             return self.state
 
 class Brewer():
-    def __init__(self):        
-        self.heat_last_error = None
-        self.heat_last_integral = 0.0
+    def __init__(self):
+        # cooling parameters
+        self.k_amb = -0.01
+        self.k_flow = -0.04
+        
+        # heating parameters
+        self.alpha = 1
+        self.beta = 5
+        self.gamma = 0.8
+        
+        self.heat_effect = 0
+        
+        # pump parameters
         self.pump_last_error = None
         self.pump_last_integral = 0.0
         self.em = EspressoMachine()
@@ -83,24 +98,17 @@ class Brewer():
         self.em.close_valve()
 
     def temp_control(self):
-        target = TEMP_TARG
-        curr_temp = self.state[0]
-
-        alpha = 1 / 20
-        beta = 1 / 200
-        gamma = 1/10
-
-        error = target - curr_temp
-        proportional = error
-        derivative = 0.0
-        integral = self.heat_last_integral
-
-        if not (self.heat_last_error is None):
-            derivative = (error - self.heat_last_error) / PERIOD
-            integral += self.heat_last_error * PERIOD
-
-        self.heat_last_error = error
-        return alpha * proportional + beta * integral + gamma * derivative
+        t_targ = TEMP_TARG
+        t_amb = TEMP_AMB
+        t_curr = self.state[0]
+        
+        flow = self.em.calc_flow(self.state[1], self.state[3]) * PERIOD
+        k = self.k_amb + self.k_flow * flow
+        t_cool = (t_curr - t_amb) * math.exp(k) + t_amb 
+        
+        self.heat_effect = self.state[2] + self.gamma * self.heat_effect
+        diff = (t_targ - (t_cool + self.alpha * self.heat_effect))
+        return diff / self.beta
 
     def press_control(self):
         target = PRESS_TARG
@@ -164,6 +172,7 @@ class Brewer():
                 start = next
                 brewing = False
 
+            # Act on decided policy
             self.take_action(action[0], action[1])
             if i % PERIODS_PER_FRAME == 0:
                 self.refresh_display(
@@ -175,6 +184,8 @@ class Brewer():
                 )
             
             i += 1
+            
+            # Iterate at specified rate
             next = time.ticks_add(next, DELTA)
             while time.ticks_diff(next, time.ticks_ms()) > 0:
                 time.sleep_us(10)
