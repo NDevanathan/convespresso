@@ -13,8 +13,8 @@ TEMP_AMB = 24.5
 PRESS_TARG = 9.
 
 # Loop frequency controls
-PERIODS_PER_FRAME = 2
-FREQ = 10
+PERIODS_PER_FRAME = 4
+FREQ = 20
 PERIOD = 1/FREQ
 DELTA = 1000//FREQ
 
@@ -36,13 +36,13 @@ class LowPassFilter:
 class Brewer():
     def __init__(self):
         # cooling parameters
-        self.k_amb = -0.001
-        self.k_flow = -0.05
+        self.k_amb = -0.01
+        self.k_flow = -0.15
         
         # heating parameters
         self.alpha = 3
-        self.beta = 8
-        self.gamma = 0.7
+        self.beta = 6
+        self.gamma = 0.8
         
         self.heat_effect = 0
         
@@ -114,7 +114,7 @@ class Brewer():
         target = PRESS_TARG
         curr_press = self.state[1]
 
-        alpha = 1 / 5
+        alpha = 1/4
         beta = 0
         gamma = 0
 
