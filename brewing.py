@@ -3,11 +3,11 @@ import math
 from espresso import EspressoMachine, BrewState
 
 # Brew phase controls
-PRE_INF_ON = 4.
-PRE_INF_OFF = 2.
+PRE_INF_ON = 8.
+PRE_INF_OFF = 4.
 
 # Brew targets
-TEMP_TARG = 95.
+TEMP_TARG = 94.
 TEMP_AMB = 24.5
 PRESS_TARG = 9.
 
@@ -35,8 +35,8 @@ class LowPassFilter:
 class Brewer():
     def __init__(self):
         # cooling parameters
-        self.k_amb = -0.005
-        self.k_flow = -0.01
+        self.k_amb = -0.004
+        self.k_flow = -0.008
         
         # heating parameters
         self.alpha = 3
@@ -104,9 +104,6 @@ class Brewer():
         diff = (t_targ - (t_cool + self.alpha * self.heat_effect))
         return diff / self.beta
 
-    def press_control(self):
-        return 1.
-
     def run(self):
         start = time.ticks_ms()
         next = start
@@ -129,11 +126,11 @@ class Brewer():
                     self.total_flow = 0
                 
                 if time.ticks_diff(next, start) / 1000 < PRE_INF_ON:
-                    action[1] = 0.5
+                    action[1] = 0.25
                 elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF:
                     action[1] = 0.
                 else:
-                    action[1] = self.press_control()
+                    action[1] = 0.5
                     self.total_flow += flow
                 
                 brewing = True
