@@ -3,18 +3,17 @@ import math
 from espresso import EspressoMachine, BrewState
 
 # Brew phase controls
-PRE_INF_ON = 4.
-PRE_INF_OFF = 2.
-RAMP_DUR = 2.
+PRE_INF_ON = 8.
+PRE_INF_OFF = 4.
 
 # Brew targets
-TEMP_TARG = 95.
+TEMP_TARG = 94.
 TEMP_AMB = 24.5
 PRESS_TARG = 9.
 
 # Loop frequency controls
-PERIODS_PER_FRAME = 4
-FREQ = 20
+PERIODS_PER_FRAME = 5
+FREQ = 30
 PERIOD = 1/FREQ
 DELTA = 1000//FREQ
 
@@ -36,23 +35,18 @@ class LowPassFilter:
 class Brewer():
     def __init__(self):
         # cooling parameters
-        self.k_amb = -0.01
-        self.k_flow = -0.15
+        self.k_amb = -0.004
+        self.k_flow = -0.008
         
         # heating parameters
         self.alpha = 3
         self.beta = 6
-        self.gamma = 0.8
-        
+        self.gamma = 0.25
         self.heat_effect = 0
         
-        # pump parameters
-        self.pump_last_error = None
-        self.pump_last_integral = 0.0
         self.em = EspressoMachine()
         self.temp_filter = LowPassFilter(0.8)
         self.press_filter = LowPassFilter(0.8)
-        self.plevel_filter = LowPassFilter(0.8)
         self.total_flow = 0
 
     def get_state(self):
@@ -106,29 +100,9 @@ class Brewer():
         k = self.k_amb + self.k_flow * flow
         t_cool = (t_curr - t_amb) * math.exp(k) + t_amb 
         
-        self.heat_effect = self.state[2] + self.gamma * self.heat_effect
+        self.heat_effect = self.gamma * self.state[2] + (1 - self.gamma) * self.heat_effect
         diff = (t_targ - (t_cool + self.alpha * self.heat_effect))
         return diff / self.beta
-
-    def press_control(self):
-        target = PRESS_TARG
-        curr_press = self.state[1]
-
-        alpha = 1/4
-        beta = 0
-        gamma = 0
-
-        error = target - curr_press
-        proportional = error
-        derivative = 0.0
-        integral = self.pump_last_integral
-
-        if not (self.pump_last_error is None):
-            derivative = (error - self.pump_last_error) / PERIOD
-            integral += self.pump_last_error * PERIOD
-
-        self.pump_last_error = error
-        return max(alpha * proportional + beta * integral + gamma * derivative, 0.0001)
 
     def run(self):
         start = time.ticks_ms()
@@ -141,7 +115,6 @@ class Brewer():
             self.state = self.get_state()
             self.state[0] = self.temp_filter.apply(dt=PERIOD, value=self.state[0])
             self.state[1] = self.press_filter.apply(dt=PERIOD, value=self.state[1])
-            self.state[3] = self.plevel_filter.apply(dt=PERIOD, value=self.state[3])
             flow = self.em.calc_flow(self.state[1], self.state[3]) * PERIOD
 
             action = [0.0, 0.0]
@@ -153,15 +126,11 @@ class Brewer():
                     self.total_flow = 0
                 
                 if time.ticks_diff(next, start) / 1000 < PRE_INF_ON:
-                    action[1] = 0.3
+                    action[1] = 0.25
                 elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF:
                     action[1] = 0.
-                elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF + RAMP_DUR:
-                    ramp = (time.ticks_diff(next, start) / 1000) - PRE_INF_ON + PRE_INF_OFF
-                    action[1] = 0.5 + ramp / 10
-                    self.total_flow += flow
                 else:
-                    action[1] = self.press_control()
+                    action[1] = 0.5
                     self.total_flow += flow
                 
                 brewing = True
