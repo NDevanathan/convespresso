@@ -8,7 +8,7 @@ PRE_INF_OFF = 2.
 RAMP_DUR = 2.
 
 # Brew targets
-TEMP_TARG = 95.
+TEMP_TARG = 96.
 TEMP_AMB = 24.5
 PRESS_TARG = 9.
 
