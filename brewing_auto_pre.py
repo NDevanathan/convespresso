@@ -146,28 +146,28 @@ class Brewer():
 
             action = [0.0, 0.0]
             action[0] = self.temp_control()
-            
+
             if self.em.is_brewing():
                 PRESS_TARG = 9.
                 if not brewing:
                     self.total_flow = 0
                 
-                action[1] = self.press_control()
-                self.total_flow += flow
+                if time.ticks_diff(next, start) / 1000 < PRE_INF_ON:
+                    action[1] = 0.3
+                elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF:
+                    action[1] = 0.
+                elif time.ticks_diff(next, start) / 1000 < PRE_INF_ON + PRE_INF_OFF + RAMP_DUR:
+                    ramp = (time.ticks_diff(next, start) / 1000) - PRE_INF_ON + PRE_INF_OFF
+                    action[1] = 0.5 + ramp / 10
+                    self.total_flow += flow
+                else:
+                    action[1] = self.press_control()
+                    self.total_flow += flow
                 
                 brewing = True
                 shot_time = time.ticks_diff(next, start) / 1000
-                
-            elif self.em.is_preinf():
-                PRESS_TARG = 2.
-                
-                action[1] = 0.3
-                self.total_flow += flow
-                
-                shot_time = time.ticks_diff(next, start) / 1000
-                
             else:
-                if brewing: self.em.close_valve()
+                self.em.close_valve()
                 PRESS_TARG = 0
                 start = next
                 brewing = False
