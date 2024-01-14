@@ -3,14 +3,14 @@ import math
 from espresso import EspressoMachine, BrewState
 
 # Brew phase controls
-PRE_INF_ON = 8.
-PRE_INF_OFF = 4.
-RAMP_DUR = 2.
+PRE_INF_ON = 4.
+PRE_INF_OFF = 2.
+RAMP_DUR = 0.
 
 # Brew targets
-TEMP_TARG = 96.
+TEMP_TARG = 95.
 TEMP_AMB = 24.5
-PRESS_TARG = 9.
+PRESS_TARG = 6.
 
 # Loop frequency controls
 PERIODS_PER_FRAME = 4
