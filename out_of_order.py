@@ -17,9 +17,9 @@ START_X = WIDTH - 10                             # Display starting x-coordinate
 START_Y = 45                                     # Display starting y-coordinate
 
 spi1 = SPI(1, baudrate=10000000, sck=SCR_SCK, mosi=SCR_MOSI)
-display = Display(self.spi1, dc=SCR_DC, cs=SCR_CS, rst=SCR_RST)
+display = Display(spi1, dc=SCR_DC, cs=SCR_CS, rst=SCR_RST)
 
 display.clear_buffers()
-m = "ESPRESSO"
+m = "OUT OF SERVICE"
 display.draw_text(WIDTH//2 + 3 * (len(m)), START_Y - 20, m, FONT, rotate=180)
 display.present()
