@@ -2,13 +2,8 @@ import time
 import math
 from espresso import EspressoMachine, BrewState
 
-# Brew phase controls
-PRE_INF_ON = 8.
-PRE_INF_OFF = 4.
-RAMP_DUR = 2.
-
 # Brew targets
-TEMP_TARG = 96.
+TEMP_TARG = 98.
 TEMP_AMB = 24.5
 PRESS_TARG = 9.
 
@@ -159,9 +154,9 @@ class Brewer():
                 shot_time = time.ticks_diff(next, start) / 1000
                 
             elif self.em.is_preinf():
-                PRESS_TARG = 2.
+                PRESS_TARG = 1.
                 
-                action[1] = 0.3
+                action[1] = 0.2
                 self.total_flow += flow
                 
                 shot_time = time.ticks_diff(next, start) / 1000
