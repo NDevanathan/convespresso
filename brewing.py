@@ -3,9 +3,9 @@ import math
 from espresso import EspressoMachine, BrewState
 
 # Brew targets
-TEMP_TARG = 98.
+TEMP_TARG = 92.
 TEMP_AMB = 24.5
-PRESS_TARG = 9.
+PRESS_TARG = 7.5
 
 # Loop frequency controls
 PERIODS_PER_FRAME = 4
@@ -143,7 +143,7 @@ class Brewer():
             action[0] = self.temp_control()
             
             if self.em.is_brewing():
-                PRESS_TARG = 9.
+                PRESS_TARG = 7.5
                 if not brewing:
                     self.total_flow = 0
                 
