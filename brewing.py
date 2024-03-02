@@ -2,10 +2,17 @@ import time
 import math
 from espresso import EspressoMachine, BrewState
 
+"""
+NOTE: The Gaggia Classic Pro has a ~8 C gap 
+between boiler temp and brew temp, with the boiler
+temp being higher. A typical saturated group espresso
+machine has only a 2-4 C gap typically, so adjust
+accordingly.
+"""
 # Brew targets
-TEMP_TARG = 92.
+TEMP_TARG = 104.0
 TEMP_AMB = 24.5
-PRESS_TARG = 7.5
+PRESS_TARG = 9.0
 
 # Loop frequency controls
 PERIODS_PER_FRAME = 4
@@ -143,7 +150,7 @@ class Brewer():
             action[0] = self.temp_control()
             
             if self.em.is_brewing():
-                PRESS_TARG = 7.5
+                PRESS_TARG = 9.0
                 if not brewing:
                     self.total_flow = 0
                 
@@ -156,7 +163,7 @@ class Brewer():
             elif self.em.is_preinf():
                 PRESS_TARG = 1.
                 
-                action[1] = 0.2
+                action[1] = 0.3
                 self.total_flow += flow
                 
                 shot_time = time.ticks_diff(next, start) / 1000
