@@ -10,7 +10,9 @@ machine has only a 2-4 C gap typically, so adjust
 accordingly.
 """
 # Brew targets
-TEMP_TARG = 104.0
+# 104.0 for tigerwalk
+# 102.5 for malabar gold
+TEMP_TARG = 106.
 TEMP_AMB = 24.5
 PRESS_TARG = 9.0
 

@@ -25,13 +25,13 @@ SCR_RST   = Pin(6)                        # Display reset pin (Not connected, pl
 
 # Define pins for the sensors, heater, pump, and valve
 PRS_SENS  = ADC(28)                        # Pressure sensor pin
-HEAT_PWM  = PWM(Pin(9, Pin.OUT), freq=10)  # Heating element pulse width modulation pin
+HEAT_PWM  = PWM(Pin(9, Pin.OUT), freq=6000)  # Heating element pulse width modulation pin
 SOL_CTRL  = Pin(22, Pin.OUT)               # Solenoid valve control pin
 TEMP_SCK  = Pin(2, Pin.OUT)                # Temperature probe clock pin
 TEMP_CS   = Pin(1, Pin.OUT)                # Temperature probe chip select pin
 TEMP_SO   = Pin(0, Pin.OUT)                # Temperature probe serial output pin
 PUMP_ZC   = Pin(8, Pin.IN)                 # Water pump zero crossing pin
-PUMP_PWM  = PWM(Pin(7, Pin.OUT), freq=20)  # Water pump pulse width modulation pin
+PUMP_PWM  = PWM(Pin(7, Pin.OUT), freq=6000)  # Water pump pulse width modulation pin
 
 # Define display settings
 FONT    = XglcdFont('res/FixedFont5x8.c', 5, 8)  # Display font
@@ -255,7 +255,7 @@ class EspressoMachine():
         Parameters
         ----------
         mode : str 
-            The espresso machine mode ('MANUAL' or 'GCODE').
+            The espresso machine mode.
         temp_targ : float
             The target temperature (Celsius).
         pres_targ : float
