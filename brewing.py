@@ -12,7 +12,7 @@ accordingly.
 # Brew targets
 # 104.0 for tigerwalk
 # 102.5 for malabar gold
-TEMP_TARG = 106.
+TEMP_TARG = 100.
 TEMP_AMB = 24.5
 PRESS_TARG = 9.0
 
